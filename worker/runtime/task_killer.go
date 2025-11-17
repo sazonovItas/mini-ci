@@ -9,7 +9,6 @@ import (
 	"time"
 
 	containerd "github.com/containerd/containerd/v2/client"
-	"github.com/sazonovItas/mini-ci/worker/runtime/helper"
 )
 
 type taskKiller struct{}
@@ -21,7 +20,7 @@ func NewTaskKiller() *taskKiller {
 }
 
 func (k taskKiller) Kill(ctx context.Context, task containerd.Task, signal syscall.Signal, waitTimeout time.Duration) error {
-	waitCtx, cancel := helper.ContextWithTimeout(ctx, waitTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
 	defer cancel()
 
 	taskWaitStatus, err := task.Wait(waitCtx)

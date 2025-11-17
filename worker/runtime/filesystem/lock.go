@@ -6,10 +6,6 @@ import (
 	"syscall"
 )
 
-const (
-	privateFilePermission = os.FileMode(0o600)
-)
-
 func Lock(path string) (file *os.File, err error) {
 	return commonlock(path, writeLock)
 }

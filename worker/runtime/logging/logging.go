@@ -1,4 +1,4 @@
-package runtime
+package logging
 
 import (
 	"io"
@@ -14,6 +14,10 @@ type LogEntry struct {
 	Log    string    `json:"log,omitempty"`
 	Stream string    `json:"stream,omitempty"`
 	Time   time.Time `json:"time,omitempty"`
+}
+
+type Logger interface {
+	Process(stdout <-chan string, stdin <-chan string) error
 }
 
 func NewLogEntry(log, stream string) LogEntry {

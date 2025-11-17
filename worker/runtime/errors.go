@@ -11,5 +11,5 @@ var (
 	ErrNilTask            = ErrInvalidArgument.WithMessage("nil task")
 	ErrMissingContainerID = ErrInvalidArgument.WithMessage("missing container id")
 	ErrTaskKillTimeout    = ErrAborted.WithMessage("kill timeout exceeded")
-	ErrCNIInitFailed      = ErrInternal.WithMessage("init cni failed")
+	ErrCNIOperationFailed = ErrInternal.WithMessage("cni operation failed")
 )

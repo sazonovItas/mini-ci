@@ -1,4 +1,4 @@
-package runtime
+package network
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 
-	containerd "github.com/containerd/containerd/v2/client"
 	gocni "github.com/containerd/go-cni"
 	"github.com/containernetworking/cni/pkg/types"
 )
@@ -37,13 +36,14 @@ type CNIFirewallConfig struct {
 }
 
 const (
+	defaultNetworkName       = "minici"
 	defaultPluginDir         = "/opt/cni/bin"
 	defaultIPTablesChainName = "MINICI-WORKER"
 )
 
 var (
 	defaultCNINetworkConfig = CNINetworkConfig{
-		NetworkName: "minici",
+		NetworkName: defaultNetworkName,
 		CNIVersion:  "1.1.0",
 		BridgeName:  "minici0",
 		IPv4: CNIv4NetworkConfig{
@@ -223,7 +223,7 @@ type cniNetwork struct {
 func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Join(ErrCNIInitFailed, err)
+			err = errors.Join(ErrInternal, err)
 		}
 	}()
 
@@ -258,43 +258,31 @@ func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 	return n, nil
 }
 
-func (n *cniNetwork) Add(ctx context.Context, containerID string, task containerd.Task) (*gocni.Result, error) {
-	if task == nil {
-		return nil, ErrNilTask
-	}
-
-	result, err := n.cni.Setup(ctx, containerID, netNsPath(task))
+func (n cniNetwork) Add(ctx context.Context, id string, pid uint32) (*gocni.Result, error) {
+	result, err := n.cni.Setup(ctx, id, netNsPath(pid))
 	if err != nil {
-		return nil, errors.Join(ErrCNIInitFailed, fmt.Errorf("cni setup: %w", err))
+		return nil, errors.Join(ErrCNIAddFailed, err)
 	}
 
 	return result, nil
 }
 
-func (n *cniNetwork) Remove(ctx context.Context, containerID string, task containerd.Task) error {
-	if task == nil {
-		return ErrNilTask
-	}
-
-	if err := n.cni.Remove(ctx, containerID, netNsPath(task)); err != nil {
-		return errors.Join(ErrCNIInitFailed, fmt.Errorf("cni remove: %w", err))
+func (n cniNetwork) Remove(ctx context.Context, id string, pid uint32) error {
+	if err := n.cni.Remove(ctx, id, netNsPath(pid)); err != nil {
+		return errors.Join(ErrCNIRemoveFailed, err)
 	}
 
 	return nil
 }
 
-func (n *cniNetwork) Check(ctx context.Context, containerID string, task containerd.Task) error {
-	if task == nil {
-		return ErrNilTask
-	}
-
-	if err := n.cni.Check(ctx, containerID, netNsPath(task)); err != nil {
-		return errors.Join(ErrCNIInitFailed, fmt.Errorf("cni check: %w", err))
+func (n cniNetwork) Check(ctx context.Context, id string, pid uint32) error {
+	if err := n.cni.Check(ctx, id, netNsPath(pid)); err != nil {
+		return errors.Join(ErrCNICheckFailed, err)
 	}
 
 	return nil
 }
 
-func netNsPath(task containerd.Task) string {
-	return fmt.Sprintf("/proc/%d/ns/net", task.Pid())
+func netNsPath(pid uint32) string {
+	return fmt.Sprintf("/proc/%d/ns/net", pid)
 }

@@ -1,16 +1,8 @@
 package runtime
 
 type ContainerSpec struct {
-	ID         string
-	Image      string
-	BindMounts []BindMount
-	Priviliged bool
-}
-
-type BindMount struct {
-	Src   string
-	Dst   string
-	Modes []string
+	ID    string
+	Image string
 }
 
 type TaskSpec struct {

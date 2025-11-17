@@ -78,7 +78,7 @@ func main() {
 	defer cancel()
 
 	go func() {
-		exitStatus, err := task.Wait(ctx)
+		exitStatus, err := task.WaitExitStatus(ctx)
 		if err != nil {
 			fmt.Printf("proc finished error: %s\n", err.Error())
 		} else {

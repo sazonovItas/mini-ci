@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	containerd "github.com/containerd/containerd/v2/client"
-	"github.com/containerd/containerd/v2/defaults"
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
+	"github.com/sazonovItas/mini-ci/worker/runtime/network"
 )
 
 type Killer interface {
@@ -23,8 +23,10 @@ type IOManager interface {
 	Delete(containerID string)
 }
 
-type RootFSManager interface {
-	PullImage(ctx context.Context, imageRef string) (image containerd.Image, err error)
+type DataStore interface {
+	NewContainer(id string) error
+	Location(id string) string
+	CleanupContainer(id string) error
 }
 
 type Network interface {
@@ -33,21 +35,25 @@ type Network interface {
 	Cleanup(ctx context.Context, id string) error
 }
 
+const (
+	defaultDataStorePath = "/var/lib/minici"
+)
+
 type Runtime struct {
-	client        *containerd.Client
-	network       Network
-	killer        Killer
-	ioManager     IOManager
-	rootfsManager RootFSManager
+	client *containerd.Client
+
+	dataStore DataStore
+	ioManager IOManager
+	killer    Killer
+	network   Network
+
+	dataStorePath string
 }
 
 type RuntimeOpt func(r *Runtime)
 
-func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (*Runtime, error) {
-	r := &Runtime{
-		client: client,
-	}
-
+func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err error) {
+	r = &Runtime{client: client}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -56,15 +62,22 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (*Runtime, error)
 		return nil, errdefs.ErrInvalidArgument.WithMessage("nil client")
 	}
 
+	if r.dataStorePath == "" {
+		r.dataStorePath = defaultDataStorePath
+	}
+
+	if r.dataStore == nil {
+		r.dataStore, err = NewDataStore(r.dataStorePath)
+		if err != nil {
+			return nil, fmt.Errorf("new data store: %w", err)
+		}
+	}
+
 	if r.network == nil {
-		network, err := NewCNINetwork(
-			WithCNINetworkConfig(defaultCNINetworkConfig),
-		)
+		r.network, err = network.NewNetwork()
 		if err != nil {
 			return nil, err
 		}
-
-		r.network = network
 	}
 
 	if r.killer == nil {
@@ -73,14 +86,6 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (*Runtime, error)
 
 	if r.ioManager == nil {
 		r.ioManager = NewIOManager()
-	}
-
-	if r.rootfsManager == nil {
-		r.rootfsManager = NewRootFSManager(
-			r.client,
-			r.client.ImageService(),
-			r.client.SnapshotService(defaults.DefaultSnapshotter),
-		)
 	}
 
 	return r, nil
@@ -96,7 +101,7 @@ func (r *Runtime) Create(
 		spec.ID = idgen.ID()
 	}
 
-	container, err := r.createContainer(ctx, spec, taskSpec, taskIO)
+	container, err := r.createContainer(ctx, spec, taskSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -117,11 +122,10 @@ func (r *Runtime) createContainer(
 	ctx context.Context,
 	spec ContainerSpec,
 	taskSpec TaskSpec,
-	taskIO TaskIO,
 ) (*Container, error) {
-	image, err := r.rootfsManager.PullImage(ctx, spec.Image)
+	image, err := r.client.Pull(ctx, spec.Image)
 	if err != nil {
-		return nil, fmt.Errorf("getting or pulling image: %w", err)
+		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 
 	ociOpts := r.ociSpecOpts(image, taskSpec)
