@@ -9,6 +9,7 @@ import (
 	containerd "github.com/containerd/containerd/v2/client"
 	gocni "github.com/containerd/go-cni"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 )
 
@@ -190,10 +191,19 @@ func (n network) addHostname(id string) error {
 }
 
 func (n network) addResolveConf(id string) error {
-	// TODO: add resolv configuration
-	resolvConf := ""
+	content, err := filesystem.ReadFile(resolvConfPath())
+	if err != nil {
+		return err
+	}
 
-	err := n.ctrStore.Set([]byte(resolvConf), id, resolvConfFile)
+	dns := getNameservers(content, IP)
+
+	resolvConf, err := buildResolvConf(dns)
+	if err != nil {
+		return err
+	}
+
+	err = n.ctrStore.Set([]byte(resolvConf), id, resolvConfFile)
 	if err != nil {
 		return fmt.Errorf("add resolve config: %w", err)
 	}
@@ -202,10 +212,7 @@ func (n network) addResolveConf(id string) error {
 }
 
 func (n network) addEtcHosts(id string, _ map[string]*gocni.Config) error {
-	// TODO: add etc hosts configuration
-	hosts := ""
-
-	err := n.ctrStore.Set([]byte(hosts), id, hostsFile)
+	err := n.ctrStore.Set([]byte("127.0.0.1 localhost\n"), id, hostsFile)
 	if err != nil {
 		return err
 	}

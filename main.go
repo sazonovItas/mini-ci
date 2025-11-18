@@ -38,9 +38,9 @@ func main() {
 			`
 				set -xeu
 
-				echo "nameserver 8.8.8.8" > /etc/resolv.conf
-
 				ping -c 2 archlinux.org
+
+				ping -c 2 localhost
 
 				apk update && apk add curl
 

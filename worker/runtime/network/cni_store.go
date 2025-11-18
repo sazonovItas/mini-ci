@@ -14,6 +14,8 @@ const (
 	cniResultsDir  = "results"
 	cniNetworksDir = "networks"
 	cniLockFile    = "lock"
+
+	cniLoopbackNetwork = "cni-loopback"
 )
 
 type cniStore struct {
@@ -36,9 +38,14 @@ func NewCNIStore(networkName string, cniDir string) (*cniStore, error) {
 }
 
 func (cs cniStore) DeleteResult(id, inf string) error {
+	networkName := cs.networkName
+	if inf == "lo" {
+		networkName = cniLoopbackNetwork
+	}
+
 	err := cs.store.Delete(
 		cniResultsDir,
-		strings.Join([]string{cs.networkName, id, inf}, "-"),
+		strings.Join([]string{networkName, id, inf}, "-"),
 	)
 	if err != nil && !errdefs.IsNotFound(err) {
 		return err
@@ -59,5 +66,5 @@ func (cs cniStore) DeleteIPReservation(ip string) error {
 }
 
 func (cs cniStore) getLockPath() string {
-	return cs.store.Location(cniNetworksDir, cniLockFile)
+	return cs.store.Location(cniNetworksDir, cs.networkName, cniLockFile)
 }

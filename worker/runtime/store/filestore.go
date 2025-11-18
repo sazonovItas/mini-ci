@@ -194,6 +194,8 @@ func (s *fileStore) Delete(keys ...string) error {
 		if err := os.RemoveAll(path); err != nil {
 			return errors.Join(ErrSystemFailure, err)
 		}
+
+		return nil
 	}
 
 	if err := os.Remove(path); err != nil {
