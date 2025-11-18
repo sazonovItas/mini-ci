@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
+	"fmt"
 
 	containerd "github.com/containerd/containerd/v2/client"
 	gocni "github.com/containerd/go-cni"
-	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
+	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 )
 
 type CNINetwork interface {
@@ -18,7 +19,9 @@ type CNINetwork interface {
 }
 
 type ContainerStore interface {
-	Location(id string) string
+	Get(id string, keys ...string) ([]byte, error)
+	Set(content []byte, id string, keys ...string) error
+	Location(id string, keys ...string) string
 }
 
 type CNIStore interface {
@@ -47,6 +50,9 @@ func WithContainerStore(store ContainerStore) NetworkOpt {
 }
 
 const (
+	hostsFile         = "hosts"
+	hostnameFile      = "hostname"
+	resolvConfFile    = "resolv.conf"
 	networkConfigFile = "network-config.json"
 )
 
@@ -60,6 +66,10 @@ func NewNetwork(opts ...NetworkOpt) (n *network, err error) {
 	n = &network{}
 	for _, opt := range opts {
 		opt(n)
+	}
+
+	if n.ctrStore == nil {
+		return nil, ErrInternal.WithMessage("nil container store")
 	}
 
 	if n.cni == nil {
@@ -76,27 +86,128 @@ func NewNetwork(opts ...NetworkOpt) (n *network, err error) {
 		}
 	}
 
-	if n.ctrStore == nil {
-		return nil, ErrInternal.WithMessage("nil container store")
-	}
-
 	return n, nil
 }
 
-func (n network) Add(ctx context.Context, id string, task containerd.Task) (err error) {
+func (n network) Init(id string) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("init network: %w", err)
+		}
+	}()
+
+	err = n.ctrStore.Set([]byte{}, id, hostnameFile)
+	if err != nil {
+		return err
+	}
+
+	err = n.ctrStore.Set([]byte{}, id, hostsFile)
+	if err != nil {
+		return err
+	}
+
+	err = n.ctrStore.Set([]byte{}, id, resolvConfFile)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n network) Mounts(id string) []specs.Mount {
+	hostname := specs.Mount{
+		Type:        "bind",
+		Source:      n.ctrStore.Location(id, hostnameFile),
+		Destination: "/etc/hostname",
+		Options:     []string{"bind", "rw"},
+	}
+
+	hosts := specs.Mount{
+		Type:        "bind",
+		Source:      n.ctrStore.Location(id, hostsFile),
+		Destination: "/etc/hosts",
+		Options:     []string{"bind", "rw"},
+	}
+
+	resolvConf := specs.Mount{
+		Type:        "bind",
+		Source:      n.ctrStore.Location(id, resolvConfFile),
+		Destination: "/etc/resolv.conf",
+		Options:     []string{"bind", "rw"},
+	}
+
+	return []specs.Mount{hosts, hostname, resolvConf}
+}
+
+func (n network) Add(ctx context.Context, id string, task containerd.Task) error {
+	if err := n.addHostname(id); err != nil {
+		return err
+	}
+
+	if err := n.addResolveConf(id); err != nil {
+		return err
+	}
+
+	if err := n.addCNI(ctx, id, task); err != nil {
+		return err
+	}
+
+	if err := n.addEtcHosts(id, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n network) addCNI(ctx context.Context, id string, task containerd.Task) error {
 	result, err := n.cni.Add(ctx, id, task.Pid())
 	if err != nil {
 		return err
 	}
 
-	netConfig, err := json.Marshal(result)
+	interfaces, err := json.Marshal(result.Interfaces)
 	if err != nil {
 		return errors.Join(ErrInternal, err)
 	}
 
-	err = filesystem.WriteFile(n.getNetworkPath(id), netConfig, 0)
+	err = n.ctrStore.Set(interfaces, id, networkConfigFile)
 	if err != nil {
 		return errors.Join(ErrInternal, err)
+	}
+
+	return nil
+}
+
+func (n network) addHostname(id string) error {
+	hostname := idgen.ShortID(id)
+
+	err := n.ctrStore.Set([]byte(hostname), id, hostnameFile)
+	if err != nil {
+		return fmt.Errorf("add hostname: %w", err)
+	}
+
+	return nil
+}
+
+func (n network) addResolveConf(id string) error {
+	// TODO: add resolv configuration
+	resolvConf := ""
+
+	err := n.ctrStore.Set([]byte(resolvConf), id, resolvConfFile)
+	if err != nil {
+		return fmt.Errorf("add resolve config: %w", err)
+	}
+
+	return nil
+}
+
+func (n network) addEtcHosts(id string, _ map[string]*gocni.Config) error {
+	// TODO: add etc hosts configuration
+	hosts := ""
+
+	err := n.ctrStore.Set([]byte(hosts), id, hostsFile)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -110,24 +221,26 @@ func (n network) Remove(ctx context.Context, id string, task containerd.Task) er
 	return nil
 }
 
-func (n network) Cleanup(ctx context.Context, id string) (err error) {
-	defer func() {
-		if err != nil {
-			err = errors.Join(ErrInternal, err)
-		}
-	}()
+func (n network) Cleanup(id string) (err error) {
+	if err := n.cleanupCNI(id); err != nil {
+		return err
+	}
 
-	content, err := filesystem.ReadFile(n.getNetworkPath(id))
+	return nil
+}
+
+func (n network) cleanupCNI(id string) (err error) {
+	content, err := n.ctrStore.Get(id, networkConfigFile)
 	if err != nil {
 		return err
 	}
 
-	var netConfig gocni.Result
-	if err := json.Unmarshal(content, &netConfig); err != nil {
+	var interfaces map[string]*gocni.Config
+	if err := json.Unmarshal(content, &interfaces); err != nil {
 		return err
 	}
 
-	for inf, config := range netConfig.Interfaces {
+	for inf, config := range interfaces {
 		if config == nil {
 			continue
 		}
@@ -148,8 +261,4 @@ func (n network) Cleanup(ctx context.Context, id string) (err error) {
 	}
 
 	return nil
-}
-
-func (n network) getNetworkPath(id string) string {
-	return filepath.Join(n.ctrStore.Location(id), networkConfigFile)
 }

@@ -18,7 +18,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	r, err := runtime.NewRuntime(client)
 	if err != nil {
@@ -26,7 +28,6 @@ func main() {
 	}
 
 	containerSpec := runtime.ContainerSpec{
-		ID:    "test",
 		Image: "docker.io/library/alpine:3.22",
 	}
 
@@ -59,7 +60,7 @@ func main() {
 		panic(err)
 	}
 	defer func() {
-		if err := r.Destroy(context.Background(), containerSpec.ID); err != nil {
+		if err := r.Destroy(context.Background(), container.ID()); err != nil {
 			fmt.Println(err.Error())
 		}
 	}()

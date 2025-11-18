@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 	"github.com/sazonovItas/mini-ci/worker/runtime/network"
 )
@@ -24,15 +25,18 @@ type IOManager interface {
 }
 
 type DataStore interface {
-	NewContainer(id string) error
-	Location(id string) string
-	CleanupContainer(id string) error
+	Set(content []byte, id string, keys ...string) error
+	Get(id string, keys ...string) (content []byte, err error)
+	Location(id string, keys ...string) (path string)
+	Cleanup(id string) error
 }
 
 type Network interface {
+	Init(id string) error
+	Mounts(id string) []specs.Mount
 	Add(ctx context.Context, id string, task containerd.Task) error
 	Remove(ctx context.Context, id string, task containerd.Task) error
-	Cleanup(ctx context.Context, id string) error
+	Cleanup(id string) error
 }
 
 const (
@@ -74,7 +78,7 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 	}
 
 	if r.network == nil {
-		r.network, err = network.NewNetwork()
+		r.network, err = network.NewNetwork(network.WithContainerStore(r.dataStore))
 		if err != nil {
 			return nil, err
 		}
@@ -97,8 +101,10 @@ func (r *Runtime) Create(
 	taskSpec TaskSpec,
 	taskIO TaskIO,
 ) (*Container, error) {
-	if spec.ID == "" {
-		spec.ID = idgen.ID()
+	spec.ID = idgen.ID()
+
+	if err := r.network.Init(spec.ID); err != nil {
+		return nil, err
 	}
 
 	container, err := r.createContainer(ctx, spec, taskSpec)
@@ -128,7 +134,7 @@ func (r *Runtime) createContainer(
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 
-	ociOpts := r.ociSpecOpts(image, taskSpec)
+	ociOpts := r.ociSpecOpts(spec.ID, image, taskSpec)
 
 	ctr, err := r.client.NewContainer(
 		ctx,
@@ -146,12 +152,13 @@ func (r *Runtime) createContainer(
 	return container, nil
 }
 
-func (r *Runtime) ociSpecOpts(image containerd.Image, taskSpec TaskSpec) []oci.SpecOpts {
+func (r *Runtime) ociSpecOpts(id string, image containerd.Image, taskSpec TaskSpec) []oci.SpecOpts {
 	ociOpts := []oci.SpecOpts{
 		oci.WithDefaultUnixDevices,
 		oci.WithDefaultPathEnv,
 		oci.WithImageConfig(image),
 		oci.WithEnv(taskSpec.Envs),
+		oci.WithMounts(r.network.Mounts(id)),
 	}
 
 	if taskSpec.Dir != "" {
@@ -207,7 +214,7 @@ func (r *Runtime) Containers(ctx context.Context, filters ...string) ([]*Contain
 	return containers, nil
 }
 
-func (r *Runtime) Destroy(ctx context.Context, id string) error {
+func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 	r.ioManager.Delete(id)
 
 	container, err := r.client.LoadContainer(ctx, id)
@@ -221,23 +228,23 @@ func (r *Runtime) Destroy(ctx context.Context, id string) error {
 			return fmt.Errorf("lookup task: %w", err)
 		}
 
-		if err := container.Delete(ctx); err != nil {
+		if err = container.Delete(ctx); err != nil {
 			return fmt.Errorf("delete container: %w", err)
+		}
+
+		if err = r.cleanup(id); err != nil {
+			return err
 		}
 
 		return nil
 	}
 
-	if err := r.killer.Kill(ctx, task, true); err != nil {
+	if err = r.killer.Kill(ctx, task, true); err != nil {
 		return fmt.Errorf("kill task gracefully: %w", err)
 	}
 
-	if err := r.network.Remove(ctx, container.ID(), task); err != nil {
+	if err = r.network.Remove(ctx, container.ID(), task); err != nil {
 		return fmt.Errorf("removing network: %w", err)
-	}
-
-	if err := r.network.Cleanup(ctx, container.ID()); err != nil {
-		return fmt.Errorf("cleaning up network: %w", err)
 	}
 
 	_, err = task.Delete(ctx, containerd.WithProcessKill)
@@ -245,8 +252,24 @@ func (r *Runtime) Destroy(ctx context.Context, id string) error {
 		return fmt.Errorf("delete task: %w", err)
 	}
 
-	if err := container.Delete(ctx); err != nil {
+	if err = container.Delete(ctx); err != nil {
 		return fmt.Errorf("delete container: %w", err)
+	}
+
+	if err = r.cleanup(id); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Runtime) cleanup(id string) error {
+	if err := r.network.Cleanup(id); err != nil {
+		return err
+	}
+
+	if err := r.dataStore.Cleanup(id); err != nil {
+		return err
 	}
 
 	return nil

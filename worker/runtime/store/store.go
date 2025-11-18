@@ -1,10 +1,5 @@
 package store
 
-type SafeStore interface {
-	Store
-	Locker
-}
-
 type Store interface {
 	Location(keys ...string) (path string)
 	Exists(keys ...string) (exist bool, err error)

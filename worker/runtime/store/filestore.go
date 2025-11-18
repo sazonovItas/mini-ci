@@ -130,8 +130,10 @@ func (s *fileStore) Set(content []byte, keys ...string) error {
 		return errors.Join(ErrSystemFailure, err)
 	}
 
-	if err != nil && stat.IsDir() {
-		return errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be written to", dest))
+	if err == nil {
+		if stat.IsDir() {
+			return errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be written to", dest))
+		}
 	}
 
 	if err := filesystem.WriteFile(dest, content, s.filePerm); err != nil {

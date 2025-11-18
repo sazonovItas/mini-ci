@@ -3,6 +3,7 @@ package network
 import (
 	"strings"
 
+	"github.com/containerd/errdefs"
 	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 	"github.com/sazonovItas/mini-ci/worker/runtime/store"
 )
@@ -16,19 +17,19 @@ const (
 )
 
 type cniStore struct {
-	network string
-	store   store.Store
+	store       store.Store
+	networkName string
 }
 
-func NewCNIStore(network string, path string) (*cniStore, error) {
-	st, err := store.NewFileStore(path, 0, 0)
+func NewCNIStore(networkName string, cniDir string) (*cniStore, error) {
+	st, err := store.NewFileStore(cniDir, 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	cni := &cniStore{
-		store:   st,
-		network: network,
+		store:       st,
+		networkName: networkName,
 	}
 
 	return cni, nil
@@ -37,9 +38,9 @@ func NewCNIStore(network string, path string) (*cniStore, error) {
 func (cs cniStore) DeleteResult(id, inf string) error {
 	err := cs.store.Delete(
 		cniResultsDir,
-		strings.Join([]string{cs.network, id, inf}, "-"),
+		strings.Join([]string{cs.networkName, id, inf}, "-"),
 	)
-	if err != nil {
+	if err != nil && !errdefs.IsNotFound(err) {
 		return err
 	}
 
@@ -48,7 +49,8 @@ func (cs cniStore) DeleteResult(id, inf string) error {
 
 func (cs cniStore) DeleteIPReservation(ip string) error {
 	return filesystem.WithLock(cs.getLockPath(), func() error {
-		if err := cs.store.Delete(cniNetworksDir, cs.network, ip); err != nil {
+		err := cs.store.Delete(cniNetworksDir, cs.networkName, ip)
+		if err != nil && !errdefs.IsNotFound(err) {
 			return err
 		}
 

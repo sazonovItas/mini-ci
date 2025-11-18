@@ -1,56 +1,57 @@
 package runtime
 
 import (
-	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
+	"fmt"
+
+	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 	"github.com/sazonovItas/mini-ci/worker/runtime/store"
 )
 
 const (
-	nameFile      = "name"
 	containersDir = "containers"
 )
 
 type dataStore struct {
-	safeStore store.SafeStore
+	store store.Store
 }
 
 var _ DataStore = (*dataStore)(nil)
 
 func NewDataStore(dataStorePath string) (*dataStore, error) {
-	safeStore, err := store.NewSafeStore(dataStorePath, 0, 0)
+	fileStore, err := store.NewFileStore(dataStorePath, 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	data := &dataStore{
-		safeStore: safeStore,
+		store: fileStore,
 	}
 
 	return data, nil
 }
 
-func (ds *dataStore) NewContainer(id string) error {
-	return ds.safeStore.WithLock(func() error {
-		err := ds.safeStore.Set([]byte(idgen.ShortID(id)), containersDir, id, nameFile)
-		if err != nil {
-			return err
+func (ds dataStore) Cleanup(id string) error {
+	return filesystem.WithLock(ds.store.Location(containersDir), func() error {
+		if err := ds.store.Delete(containersDir, id); err != nil {
+			return fmt.Errorf("cleanup container dir %s: %w", id, err)
 		}
 
 		return nil
 	})
 }
 
-func (ds *dataStore) CleanupContainer(id string) error {
-	return ds.safeStore.WithLock(func() error {
-		err := ds.safeStore.Delete(containersDir, id)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
+func (ds dataStore) Location(id string, keys ...string) string {
+	return ds.store.Location(ds.pathKeys(id, keys...)...)
 }
 
-func (ds *dataStore) Location(id string) string {
-	return ds.safeStore.Location(containersDir, id)
+func (ds dataStore) Get(id string, keys ...string) ([]byte, error) {
+	return ds.store.Get(ds.pathKeys(id, keys...)...)
+}
+
+func (ds dataStore) Set(content []byte, id string, keys ...string) error {
+	return ds.store.Set(content, ds.pathKeys(id, keys...)...)
+}
+
+func (ds dataStore) pathKeys(id string, keys ...string) []string {
+	return append([]string{containersDir, id}, keys...)
 }
