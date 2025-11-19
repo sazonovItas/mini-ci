@@ -32,11 +32,10 @@ type DataStore interface {
 }
 
 type Network interface {
-	Init(id string) error
+	Setup(ctx context.Context, id string) (network.NetworkConfig, error)
+	Load(ctx context.Context, id string) (network.NetworkConfig, error)
+	Cleanup(ctx context.Context, id string) error
 	Mounts(id string) []specs.Mount
-	Add(ctx context.Context, id string, task containerd.Task) error
-	Remove(ctx context.Context, id string, task containerd.Task) error
-	Cleanup(id string) error
 }
 
 const (
@@ -78,7 +77,7 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 	}
 
 	if r.network == nil {
-		r.network, err = network.NewNetwork(network.WithContainerStore(r.dataStore))
+		r.network, err = network.NewNetwork(defaultDataStorePath)
 		if err != nil {
 			return nil, err
 		}
@@ -103,22 +102,19 @@ func (r *Runtime) Create(
 ) (*Container, error) {
 	spec.ID = idgen.ID()
 
-	if err := r.network.Init(spec.ID); err != nil {
-		return nil, err
-	}
-
-	container, err := r.createContainer(ctx, spec, taskSpec)
+	netConfig, err := r.network.Setup(ctx, spec.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	task, err := container.newTask(ctx, taskIO)
+	container, err := r.createContainer(ctx, spec, taskSpec, netConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = container.NewTask(ctx, taskIO)
 	if err != nil {
 		return nil, fmt.Errorf("creating init task: %w", err)
-	}
-
-	if err := r.network.Add(ctx, container.ID(), task); err != nil {
-		return nil, fmt.Errorf("adding task to network: %w", err)
 	}
 
 	return container, nil
@@ -128,13 +124,14 @@ func (r *Runtime) createContainer(
 	ctx context.Context,
 	spec ContainerSpec,
 	taskSpec TaskSpec,
+	netConfig network.NetworkConfig,
 ) (*Container, error) {
 	image, err := r.client.Pull(ctx, spec.Image)
 	if err != nil {
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 
-	ociOpts := r.ociSpecOpts(spec.ID, image, taskSpec)
+	ociOpts := r.ociSpecOpts(spec.ID, image, taskSpec, netConfig.NetNsPath)
 
 	ctr, err := r.client.NewContainer(
 		ctx,
@@ -152,13 +149,19 @@ func (r *Runtime) createContainer(
 	return container, nil
 }
 
-func (r *Runtime) ociSpecOpts(id string, image containerd.Image, taskSpec TaskSpec) []oci.SpecOpts {
+func (r *Runtime) ociSpecOpts(id string, image containerd.Image, taskSpec TaskSpec, netNsPath string) []oci.SpecOpts {
 	ociOpts := []oci.SpecOpts{
 		oci.WithDefaultUnixDevices,
 		oci.WithDefaultPathEnv,
 		oci.WithImageConfig(image),
 		oci.WithEnv(taskSpec.Envs),
 		oci.WithMounts(r.network.Mounts(id)),
+		oci.WithLinuxNamespace(
+			specs.LinuxNamespace{
+				Type: specs.NetworkNamespace,
+				Path: netNsPath,
+			},
+		),
 	}
 
 	if taskSpec.Dir != "" {
@@ -232,7 +235,7 @@ func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 			return fmt.Errorf("delete container: %w", err)
 		}
 
-		if err = r.cleanup(id); err != nil {
+		if err = r.cleanup(ctx, id); err != nil {
 			return err
 		}
 
@@ -241,10 +244,6 @@ func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 
 	if err = r.killer.Kill(ctx, task, true); err != nil {
 		return fmt.Errorf("kill task gracefully: %w", err)
-	}
-
-	if err = r.network.Remove(ctx, container.ID(), task); err != nil {
-		return fmt.Errorf("removing network: %w", err)
 	}
 
 	_, err = task.Delete(ctx, containerd.WithProcessKill)
@@ -256,15 +255,15 @@ func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 		return fmt.Errorf("delete container: %w", err)
 	}
 
-	if err = r.cleanup(id); err != nil {
+	if err = r.cleanup(ctx, id); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *Runtime) cleanup(id string) error {
-	if err := r.network.Cleanup(id); err != nil {
+func (r *Runtime) cleanup(ctx context.Context, id string) error {
+	if err := r.network.Cleanup(ctx, id); err != nil {
 		return err
 	}
 

@@ -105,7 +105,7 @@ func (c *Container) Stop(ctx context.Context, kill bool) error {
 	return nil
 }
 
-func (c *Container) newTask(ctx context.Context, taskIO TaskIO) (containerd.Task, error) {
+func (c *Container) NewTask(ctx context.Context, taskIO TaskIO) (containerd.Task, error) {
 	ioCreator := c.ioManager.Creator(
 		c.ID(),
 		cio.NewCreator(containerCIO(taskIO, false)...),

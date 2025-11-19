@@ -1,33 +1,24 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 
-	containerd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/pkg/netns"
 	gocni "github.com/containerd/go-cni"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 )
 
 type CNINetwork interface {
-	Add(ctx context.Context, id string, pid uint32) (result *gocni.Result, err error)
-	Check(ctx context.Context, id string, pid uint32) error
-	Remove(ctx context.Context, id string, pid uint32) error
-}
-
-type ContainerStore interface {
-	Get(id string, keys ...string) ([]byte, error)
-	Set(content []byte, id string, keys ...string) error
-	Location(id string, keys ...string) string
-}
-
-type CNIStore interface {
-	DeleteResult(id string, inf string) error
-	DeleteIPReservation(ip string) error
+	Add(ctx context.Context, id string, netNsPath string) (result *gocni.Result, err error)
+	Check(ctx context.Context, id string, netNsPath string) error
+	Remove(ctx context.Context, id string, netNsPath string) error
 }
 
 type NetworkOpt func(n *network)
@@ -38,39 +29,27 @@ func WithCNINetwork(cni CNINetwork) NetworkOpt {
 	}
 }
 
-func WithCNIStore(store CNIStore) NetworkOpt {
-	return func(n *network) {
-		n.cniStore = store
-	}
-}
-
-func WithContainerStore(store ContainerStore) NetworkOpt {
-	return func(n *network) {
-		n.ctrStore = store
-	}
-}
-
 const (
-	hostsFile         = "hosts"
-	hostnameFile      = "hostname"
-	resolvConfFile    = "resolv.conf"
-	networkConfigFile = "network-config.json"
+	containersDir = "containers"
+	netNsBaseDir  = "/var/run/netns"
+
+	privateFilePerm = os.FileMode(0o600)
 )
 
 type network struct {
-	cni      CNINetwork
-	cniStore CNIStore
-	ctrStore ContainerStore
+	cni       CNINetwork
+	dataStore string
 }
 
-func NewNetwork(opts ...NetworkOpt) (n *network, err error) {
-	n = &network{}
+type NetworkConfig struct {
+	NetNsPath  string              `json:"netNsPath,omitempty"`
+	Interfaces map[string][]net.IP `json:"interfaces,omitempty"`
+}
+
+func NewNetwork(dataStore string, opts ...NetworkOpt) (n *network, err error) {
+	n = &network{dataStore: dataStore}
 	for _, opt := range opts {
 		opt(n)
-	}
-
-	if n.ctrStore == nil {
-		return nil, ErrInternal.WithMessage("nil container store")
 	}
 
 	if n.cni == nil {
@@ -80,36 +59,130 @@ func NewNetwork(opts ...NetworkOpt) (n *network, err error) {
 		}
 	}
 
-	if n.cniStore == nil {
-		n.cniStore, err = NewCNIStore(defaultNetworkName, defaultCNIDir)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return n, nil
 }
 
-func (n network) Init(id string) (err error) {
-	defer func() {
+func (n network) Setup(ctx context.Context, id string) (NetworkConfig, error) {
+	ns, err := n.setupNetNs()
+	if err != nil {
+		return NetworkConfig{}, err
+	}
+
+	result, err := n.cni.Add(ctx, id, ns.GetPath())
+	if err != nil {
+		return NetworkConfig{}, err
+	}
+
+	if err := n.setupContainerFiles(id); err != nil {
+		return NetworkConfig{}, err
+	}
+
+	config, err := networkConfig(ns.GetPath(), result)
+	if err != nil {
+		return NetworkConfig{}, nil
+	}
+
+	if err := n.saveConfig(id, config); err != nil {
+		return NetworkConfig{}, err
+	}
+
+	return config, nil
+}
+
+func (n network) setupNetNs() (*netns.NetNS, error) {
+	if err := os.MkdirAll(netNsBaseDir, os.FileMode(0o711)); err != nil {
+		return nil, errors.Join(ErrMkdirNetNsBaseDir, err)
+	}
+
+	ns, err := netns.NewNetNS(netNsBaseDir)
+	if err != nil {
+		return nil, errors.Join(ErrNewNetNs, err)
+	}
+
+	return ns, nil
+}
+
+func (n network) setupContainerFiles(id string) error {
+	if err := os.MkdirAll(filepath.Join(n.dataStore, containersDir, id), (0o711)); err != nil {
+		return err
+	}
+
+	if err := n.setupHostname(id); err != nil {
+		return err
+	}
+
+	if err := n.setupHosts(id); err != nil {
+		return err
+	}
+
+	if err := n.setupResolvConf(id); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n network) setupHostname(id string) error {
+	err := os.WriteFile(n.getHostNamePath(id), []byte(idgen.ShortID(id)), privateFilePerm)
+	if err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	return nil
+}
+
+func (n network) setupHosts(id string) error {
+	err := os.WriteFile(n.getHostsPath(id), []byte("127.0.0.1 localhost\n"), privateFilePerm)
+	if err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	return nil
+}
+
+func (n network) setupResolvConf(id string) error {
+	content, err := os.ReadFile(resolvConfPath())
+	if err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	nameservers := getNameservers(content, IP)
+
+	resolvConf := bytes.NewBuffer(nil)
+	for _, ns := range nameservers {
+		_, err := resolvConf.Write([]byte("nameserver " + ns + "\n"))
 		if err != nil {
-			err = fmt.Errorf("init network: %w", err)
+			return err
 		}
-	}()
+	}
 
-	err = n.ctrStore.Set([]byte{}, id, hostnameFile)
+	err = os.WriteFile(n.getResolvConfPath(id), resolvConf.Bytes(), privateFilePerm)
+	if err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	return nil
+}
+
+func (n network) Load(_ context.Context, id string) (NetworkConfig, error) {
+	return n.loadConfig(id)
+}
+
+func (n network) Cleanup(ctx context.Context, id string) error {
+	config, err := n.loadConfig(id)
 	if err != nil {
 		return err
 	}
 
-	err = n.ctrStore.Set([]byte{}, id, hostsFile)
-	if err != nil {
+	if err := n.cni.Remove(ctx, id, config.NetNsPath); err != nil {
 		return err
 	}
 
-	err = n.ctrStore.Set([]byte{}, id, resolvConfFile)
-	if err != nil {
-		return err
+	ns := netns.LoadNetNS(config.NetNsPath)
+	if ns != nil {
+		if err := ns.Remove(); err != nil {
+			return errors.Join(ErrRemoveNetNs, err)
+		}
 	}
 
 	return nil
@@ -118,21 +191,21 @@ func (n network) Init(id string) (err error) {
 func (n network) Mounts(id string) []specs.Mount {
 	hostname := specs.Mount{
 		Type:        "bind",
-		Source:      n.ctrStore.Location(id, hostnameFile),
+		Source:      n.getHostNamePath(id),
 		Destination: "/etc/hostname",
 		Options:     []string{"bind", "rw"},
 	}
 
 	hosts := specs.Mount{
 		Type:        "bind",
-		Source:      n.ctrStore.Location(id, hostsFile),
+		Source:      n.getHostsPath(id),
 		Destination: "/etc/hosts",
 		Options:     []string{"bind", "rw"},
 	}
 
 	resolvConf := specs.Mount{
 		Type:        "bind",
-		Source:      n.ctrStore.Location(id, resolvConfFile),
+		Source:      n.getResolvConfPath(id),
 		Destination: "/etc/resolv.conf",
 		Options:     []string{"bind", "rw"},
 	}
@@ -140,132 +213,77 @@ func (n network) Mounts(id string) []specs.Mount {
 	return []specs.Mount{hosts, hostname, resolvConf}
 }
 
-func (n network) Add(ctx context.Context, id string, task containerd.Task) error {
-	if err := n.addHostname(id); err != nil {
-		return err
+func networkConfig(netNsPath string, result *gocni.Result) (NetworkConfig, error) {
+	if result == nil {
+		return NetworkConfig{}, ErrCNINilResult
 	}
 
-	if err := n.addResolveConf(id); err != nil {
-		return err
-	}
-
-	if err := n.addCNI(ctx, id, task); err != nil {
-		return err
-	}
-
-	if err := n.addEtcHosts(id, nil); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (n network) addCNI(ctx context.Context, id string, task containerd.Task) error {
-	result, err := n.cni.Add(ctx, id, task.Pid())
-	if err != nil {
-		return err
-	}
-
-	interfaces, err := json.Marshal(result.Interfaces)
-	if err != nil {
-		return errors.Join(ErrInternal, err)
-	}
-
-	err = n.ctrStore.Set(interfaces, id, networkConfigFile)
-	if err != nil {
-		return errors.Join(ErrInternal, err)
-	}
-
-	return nil
-}
-
-func (n network) addHostname(id string) error {
-	hostname := idgen.ShortID(id)
-
-	err := n.ctrStore.Set([]byte(hostname), id, hostnameFile)
-	if err != nil {
-		return fmt.Errorf("add hostname: %w", err)
-	}
-
-	return nil
-}
-
-func (n network) addResolveConf(id string) error {
-	content, err := filesystem.ReadFile(resolvConfPath())
-	if err != nil {
-		return err
-	}
-
-	dns := getNameservers(content, IP)
-
-	resolvConf, err := buildResolvConf(dns)
-	if err != nil {
-		return err
-	}
-
-	err = n.ctrStore.Set([]byte(resolvConf), id, resolvConfFile)
-	if err != nil {
-		return fmt.Errorf("add resolve config: %w", err)
-	}
-
-	return nil
-}
-
-func (n network) addEtcHosts(id string, _ map[string]*gocni.Config) error {
-	err := n.ctrStore.Set([]byte("127.0.0.1 localhost\n"), id, hostsFile)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (n network) Remove(ctx context.Context, id string, task containerd.Task) error {
-	if err := n.cni.Remove(ctx, id, task.Pid()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (n network) Cleanup(id string) (err error) {
-	if err := n.cleanupCNI(id); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (n network) cleanupCNI(id string) (err error) {
-	content, err := n.ctrStore.Get(id, networkConfigFile)
-	if err != nil {
-		return err
-	}
-
-	var interfaces map[string]*gocni.Config
-	if err := json.Unmarshal(content, &interfaces); err != nil {
-		return err
-	}
-
-	for inf, config := range interfaces {
+	interfaces := make(map[string][]net.IP)
+	for inf, config := range result.Interfaces {
 		if config == nil {
 			continue
 		}
 
-		for _, ip := range config.IPConfigs {
-			if ip == nil {
+		var ips []net.IP
+		for _, ipConfig := range config.IPConfigs {
+			if ipConfig == nil {
 				continue
 			}
 
-			if err := n.cniStore.DeleteIPReservation(ip.IP.String()); err != nil {
-				return err
-			}
+			ips = append(ips, ipConfig.IP)
 		}
 
-		if err := n.cniStore.DeleteResult(id, inf); err != nil {
-			return ErrInternal
-		}
+		interfaces[inf] = ips
+	}
+
+	config := NetworkConfig{
+		NetNsPath:  netNsPath,
+		Interfaces: interfaces,
+	}
+
+	return config, nil
+}
+
+func (n network) saveConfig(id string, config NetworkConfig) error {
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return errors.Join(ErrInternal, err)
+	}
+
+	err = os.WriteFile(n.getNetworkConfigPath(id), configJSON, privateFilePerm)
+	if err != nil {
+		return errors.Join(ErrInternal, err)
 	}
 
 	return nil
+}
+
+func (n network) loadConfig(id string) (NetworkConfig, error) {
+	content, err := os.ReadFile(n.getNetworkConfigPath(id))
+	if err != nil {
+		return NetworkConfig{}, errors.Join(ErrInternal, err)
+	}
+
+	var config NetworkConfig
+	if err := json.Unmarshal(content, &config); err != nil {
+		return NetworkConfig{}, errors.Join(ErrInternal, err)
+	}
+
+	return config, nil
+}
+
+func (n network) getNetworkConfigPath(id string) string {
+	return filepath.Join(n.dataStore, containersDir, id, "network-config.json")
+}
+
+func (n network) getHostNamePath(id string) string {
+	return filepath.Join(n.dataStore, containersDir, id, "hostname")
+}
+
+func (n network) getHostsPath(id string) string {
+	return filepath.Join(n.dataStore, containersDir, id, "hosts")
+}
+
+func (n network) getResolvConfPath(id string) string {
+	return filepath.Join(n.dataStore, containersDir, id, "resolv.conf")
 }

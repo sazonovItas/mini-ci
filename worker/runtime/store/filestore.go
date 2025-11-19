@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 )
 
 const (
@@ -77,7 +75,7 @@ func (s *fileStore) Get(keys ...string) ([]byte, error) {
 		return nil, errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be read as a file", path))
 	}
 
-	content, err := filesystem.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Join(ErrSystemFailure, err)
 	}
@@ -136,7 +134,7 @@ func (s *fileStore) Set(content []byte, keys ...string) error {
 		}
 	}
 
-	if err := filesystem.WriteFile(dest, content, s.filePerm); err != nil {
+	if err := os.WriteFile(dest, content, s.filePerm); err != nil {
 		return errors.Join(ErrSystemFailure, err)
 	}
 

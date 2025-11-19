@@ -2,10 +2,9 @@ package network
 
 import (
 	"bytes"
+	"os"
 	"regexp"
 	"sync"
-
-	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 )
 
 const (
@@ -26,7 +25,7 @@ var (
 
 func resolvConfPath() string {
 	detectSystemdResolvConfOnce.Do(func() {
-		candidateResolvConf, err := filesystem.ReadFile(defaultResolvConfPath)
+		candidateResolvConf, err := os.ReadFile(defaultResolvConfPath)
 		if err != nil {
 			return
 		}

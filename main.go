@@ -78,14 +78,33 @@ func main() {
 	ctx, cancel := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	go func() {
-		exitStatus, err := task.WaitExitStatus(ctx)
-		if err != nil {
-			fmt.Printf("proc finished error: %s\n", err.Error())
-		} else {
-			fmt.Printf("proc finished with status %d\n", exitStatus)
-		}
-	}()
+	exitStatus, err := task.WaitExitStatus(ctx)
+	if err != nil {
+		fmt.Printf("proc finished error: %s\n", err.Error())
+	} else {
+		fmt.Printf("proc finished with status %d\n", exitStatus)
+	}
+
+	_, err = container.NewTask(ctx, runtime.TaskIO{
+		Stdin:  nil,
+		Stdout: os.Stdout,
+		Stderr: os.Stdout,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	task, err = container.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
+
+	exitStatus, err = task.WaitExitStatus(ctx)
+	if err != nil {
+		fmt.Printf("proc finished error: %s\n", err.Error())
+	} else {
+		fmt.Printf("proc finished with status %d\n", exitStatus)
+	}
 
 	<-ctx.Done()
 }

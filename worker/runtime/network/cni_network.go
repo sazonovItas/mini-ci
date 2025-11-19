@@ -258,8 +258,8 @@ func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 	return n, nil
 }
 
-func (n cniNetwork) Add(ctx context.Context, id string, pid uint32) (*gocni.Result, error) {
-	result, err := n.cni.Setup(ctx, id, netNsPath(pid))
+func (n cniNetwork) Add(ctx context.Context, id string, netNsPath string) (*gocni.Result, error) {
+	result, err := n.cni.Setup(ctx, id, netNsPath)
 	if err != nil {
 		return nil, errors.Join(ErrCNIAddFailed, err)
 	}
@@ -267,22 +267,18 @@ func (n cniNetwork) Add(ctx context.Context, id string, pid uint32) (*gocni.Resu
 	return result, nil
 }
 
-func (n cniNetwork) Remove(ctx context.Context, id string, pid uint32) error {
-	if err := n.cni.Remove(ctx, id, netNsPath(pid)); err != nil {
+func (n cniNetwork) Remove(ctx context.Context, id string, netNsPath string) error {
+	if err := n.cni.Remove(ctx, id, netNsPath); err != nil {
 		return errors.Join(ErrCNIRemoveFailed, err)
 	}
 
 	return nil
 }
 
-func (n cniNetwork) Check(ctx context.Context, id string, pid uint32) error {
-	if err := n.cni.Check(ctx, id, netNsPath(pid)); err != nil {
+func (n cniNetwork) Check(ctx context.Context, id string, netNsPath string) error {
+	if err := n.cni.Check(ctx, id, netNsPath); err != nil {
 		return errors.Join(ErrCNICheckFailed, err)
 	}
 
 	return nil
-}
-
-func netNsPath(pid uint32) string {
-	return fmt.Sprintf("/proc/%d/ns/net", pid)
 }
