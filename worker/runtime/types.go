@@ -1,19 +1,20 @@
 package runtime
 
+import "io"
+
+type TaskIO struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
 type ContainerSpec struct {
-	ID    string
+	Envs  []string
 	Image string
+	Dir   string
 }
 
 type TaskSpec struct {
 	Path string
 	Args []string
-	Envs []string
-	Dir  string
-	User *UserSpec
-}
-
-type UserSpec struct {
-	UID int
-	GID int
 }

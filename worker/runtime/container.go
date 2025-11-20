@@ -3,18 +3,13 @@ package runtime
 import (
 	"context"
 	"fmt"
-	"io"
 
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/cio"
+	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
-
-type TaskIO struct {
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-}
 
 type Container struct {
 	container containerd.Container
@@ -105,22 +100,32 @@ func (c *Container) Stop(ctx context.Context, kill bool) error {
 	return nil
 }
 
-func (c *Container) NewTask(ctx context.Context, taskIO TaskIO) (containerd.Task, error) {
-	ioCreator := c.ioManager.Creator(
-		c.ID(),
-		cio.NewCreator(containerCIO(taskIO, false)...),
+func (c *Container) NewTask(ctx context.Context, spec TaskSpec, taskIO TaskIO) error {
+	ociSpec, err := c.container.Spec(ctx)
+	if err != nil {
+		return fmt.Errorf("container spec: %w", err)
+	}
+
+	err = c.container.Update(
+		ctx,
+		containerd.UpdateContainerOpts(containerd.WithSpec(ociSpec, taskOCISpecOpts(spec)...)),
 	)
+	if err != nil {
+		return fmt.Errorf("update oci spec: %w", err)
+	}
+
+	ioCreator := c.ioManager.Creator(c.ID(), cio.NewCreator(containerCIO(taskIO, false)...))
 
 	task, err := c.container.NewTask(ctx, ioCreator)
 	if err != nil {
-		return nil, fmt.Errorf("create new task: %w", err)
+		return fmt.Errorf("create new task: %w", err)
 	}
 
 	if err := task.CloseIO(ctx, containerd.WithStdinCloser); err != nil {
-		return nil, fmt.Errorf("close stdin stream: %w", err)
+		return fmt.Errorf("close stdin stream: %w", err)
 	}
 
-	return task, nil
+	return nil
 }
 
 func containerCIO(taskIO TaskIO, tty bool) []cio.Opt {
@@ -141,6 +146,47 @@ func containerCIO(taskIO TaskIO, tty bool) []cio.Opt {
 			taskIO.Stderr,
 		),
 		cio.WithTerminal,
+	}
+
+	return opts
+}
+
+func containerOciSpecOpts(
+	image containerd.Image,
+	spec ContainerSpec,
+	netNsPath string,
+	mounts []specs.Mount,
+) []oci.SpecOpts {
+	opts := []oci.SpecOpts{
+		oci.WithDefaultPathEnv,
+		oci.WithDefaultUnixDevices,
+		oci.WithImageConfig(image),
+		oci.WithEnv(spec.Envs),
+		oci.WithMounts(mounts),
+		oci.WithLinuxNamespace(
+			specs.LinuxNamespace{
+				Type: specs.NetworkNamespace,
+				Path: netNsPath,
+			},
+		),
+	}
+
+	if spec.Dir != "" {
+		opts = append(opts, oci.WithProcessCwd(spec.Dir))
+	}
+
+	return opts
+}
+
+func taskOCISpecOpts(spec TaskSpec) []oci.SpecOpts {
+	var opts []oci.SpecOpts
+	if spec.Path != "" {
+		args := []string{spec.Path}
+		if len(spec.Args) != 0 {
+			args = append(args, spec.Args...)
+		}
+
+		opts = append(opts, oci.WithProcessArgs(args...))
 	}
 
 	return opts

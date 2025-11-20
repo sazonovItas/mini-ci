@@ -5,6 +5,7 @@ import "github.com/containerd/errdefs"
 var (
 	ErrInternal = errdefs.ErrInternal
 
+	ErrCNIInitFailed   = ErrInternal.WithMessage("cni init failed")
 	ErrCNIAddFailed    = ErrInternal.WithMessage("cni add failed")
 	ErrCNICheckFailed  = ErrInternal.WithMessage("cni check failed")
 	ErrCNIRemoveFailed = ErrInternal.WithMessage("cni remove failed")

@@ -111,8 +111,8 @@ func (c CNINetworkConfig) ToJSONv4() string {
 	}
 
 	routes := []types.Route{
-		{Dst: *subnet},
 		{Dst: *defaultRouteV4},
+		{Dst: *subnet},
 	}
 
 	bridgePlugin := BridgePlugin{
@@ -158,8 +158,8 @@ func (c CNINetworkConfig) ToJSONv6() string {
 	}
 
 	routes := []types.Route{
-		{Dst: *subnet},
 		{Dst: *defaultRouteV6},
+		{Dst: *subnet},
 	}
 
 	bridgePlugin := BridgePlugin{
@@ -223,7 +223,7 @@ type cniNetwork struct {
 func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Join(ErrInternal, err)
+			err = errors.Join(ErrCNIInitFailed, err)
 		}
 	}()
 
@@ -243,8 +243,8 @@ func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 		}
 
 		opts := []gocni.Opt{
-			gocni.WithLoNetwork,
 			gocni.WithConfListBytes([]byte(n.config.ToJSONv4())),
+			gocni.WithLoNetwork,
 		}
 		if n.config.IPv6.Enabled {
 			opts = append(opts, gocni.WithConfListBytes([]byte(n.config.ToJSONv6())))

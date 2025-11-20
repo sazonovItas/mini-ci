@@ -31,5 +31,9 @@ func ID() string {
 }
 
 func ShortID(id string) string {
+	if len(id) < shortIDLength {
+		return id
+	}
+
 	return id[:shortIDLength]
 }

@@ -40,11 +40,7 @@ func main() {
 
 				ping -c 2 archlinux.org
 
-				ping -c 2 localhost
-
-				apk update && apk add curl
-
-				curl -Lf archlinux.org
+				ip addr
 			`,
 		},
 	}
@@ -55,7 +51,7 @@ func main() {
 		Stderr: os.Stdout,
 	}
 
-	container, err := r.Create(ctx, containerSpec, taskSpec, taskIO)
+	container, err := r.Create(ctx, containerSpec)
 	if err != nil {
 		panic(err)
 	}
@@ -64,6 +60,10 @@ func main() {
 			fmt.Println(err.Error())
 		}
 	}()
+
+	if err := container.NewTask(ctx, taskSpec, taskIO); err != nil {
+		panic(err)
+	}
 
 	task, err := container.Start(ctx)
 	if err != nil {
@@ -85,12 +85,21 @@ func main() {
 		fmt.Printf("proc finished with status %d\n", exitStatus)
 	}
 
-	_, err = container.NewTask(ctx, runtime.TaskIO{
-		Stdin:  nil,
-		Stdout: os.Stdout,
-		Stderr: os.Stdout,
-	})
-	if err != nil {
+	taskSpec = runtime.TaskSpec{
+		Path: "sh",
+		Args: []string{
+			"-c",
+			`
+				set -xeu
+
+				echo "Hello, second task"
+
+				ip addr
+			`,
+		},
+	}
+
+	if err := container.NewTask(ctx, taskSpec, taskIO); err != nil {
 		panic(err)
 	}
 

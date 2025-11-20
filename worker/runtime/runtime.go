@@ -6,7 +6,6 @@ import (
 
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/cio"
-	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
@@ -94,27 +93,17 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 	return r, nil
 }
 
-func (r *Runtime) Create(
-	ctx context.Context,
-	spec ContainerSpec,
-	taskSpec TaskSpec,
-	taskIO TaskIO,
-) (*Container, error) {
-	spec.ID = idgen.ID()
+func (r *Runtime) Create(ctx context.Context, spec ContainerSpec) (*Container, error) {
+	id := idgen.ID()
 
-	netConfig, err := r.network.Setup(ctx, spec.ID)
+	netConfig, err := r.network.Setup(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	container, err := r.createContainer(ctx, spec, taskSpec, netConfig)
+	container, err := r.createContainer(ctx, id, spec, netConfig)
 	if err != nil {
 		return nil, err
-	}
-
-	_, err = container.NewTask(ctx, taskIO)
-	if err != nil {
-		return nil, fmt.Errorf("creating init task: %w", err)
 	}
 
 	return container, nil
@@ -122,8 +111,8 @@ func (r *Runtime) Create(
 
 func (r *Runtime) createContainer(
 	ctx context.Context,
+	id string,
 	spec ContainerSpec,
-	taskSpec TaskSpec,
 	netConfig network.NetworkConfig,
 ) (*Container, error) {
 	image, err := r.client.Pull(ctx, spec.Image)
@@ -131,12 +120,11 @@ func (r *Runtime) createContainer(
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 
-	ociOpts := r.ociSpecOpts(spec.ID, image, taskSpec, netConfig.NetNsPath)
+	ociOpts := containerOciSpecOpts(image, spec, netConfig.NetNsPath, r.network.Mounts(id))
 
 	ctr, err := r.client.NewContainer(
-		ctx,
-		spec.ID,
-		containerd.WithNewSnapshot(spec.ID, image),
+		ctx, id,
+		containerd.WithNewSnapshot(id, image),
 		containerd.WithImageConfigLabels(image),
 		containerd.WithNewSpec(ociOpts...),
 	)
@@ -147,47 +135,6 @@ func (r *Runtime) createContainer(
 	container := NewContainer(ctr, r.ioManager, r.killer)
 
 	return container, nil
-}
-
-func (r *Runtime) ociSpecOpts(id string, image containerd.Image, taskSpec TaskSpec, netNsPath string) []oci.SpecOpts {
-	ociOpts := []oci.SpecOpts{
-		oci.WithDefaultUnixDevices,
-		oci.WithDefaultPathEnv,
-		oci.WithImageConfig(image),
-		oci.WithEnv(taskSpec.Envs),
-		oci.WithMounts(r.network.Mounts(id)),
-		oci.WithLinuxNamespace(
-			specs.LinuxNamespace{
-				Type: specs.NetworkNamespace,
-				Path: netNsPath,
-			},
-		),
-	}
-
-	if taskSpec.Dir != "" {
-		ociOpts = append(ociOpts, oci.WithProcessCwd(taskSpec.Dir))
-	}
-
-	if taskSpec.Path != "" {
-		args := []string{taskSpec.Path}
-		if len(taskSpec.Args) != 0 {
-			args = append(args, taskSpec.Args...)
-		}
-
-		ociOpts = append(ociOpts, oci.WithProcessArgs(args...))
-	}
-
-	if taskSpec.User != nil {
-		ociOpts = append(
-			ociOpts,
-			oci.WithUIDGID(
-				uint32(taskSpec.User.UID),
-				uint32(taskSpec.User.GID),
-			),
-		)
-	}
-
-	return ociOpts
 }
 
 func (r *Runtime) Container(ctx context.Context, id string) (*Container, error) {

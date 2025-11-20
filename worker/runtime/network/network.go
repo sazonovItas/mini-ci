@@ -233,7 +233,9 @@ func networkConfig(netNsPath string, result *gocni.Result) (NetworkConfig, error
 			ips = append(ips, ipConfig.IP)
 		}
 
-		interfaces[inf] = ips
+		if len(ips) > 0 {
+			interfaces[inf] = ips
+		}
 	}
 
 	config := NetworkConfig{
