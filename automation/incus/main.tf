@@ -18,8 +18,8 @@ resource "incus_profile" "minici_worker" {
   project     = var.project_name
 
   config = {
-    "limits.cpu"     = 2
-    "limits.memory"  = "2GiB"
+    "limits.cpu"    = 2
+    "limits.memory" = "2GiB"
     "user.user-data" = templatefile(
       "${path.module}/cloud-init/worker.yml",
       { admin_public_ssh_key = file("${path.module}/.ssh_keys/admin.pub") },

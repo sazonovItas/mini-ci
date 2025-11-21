@@ -9,6 +9,7 @@ require (
 	github.com/containernetworking/cni v1.3.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/miekg/dns v1.1.68
+	github.com/muesli/cancelreader v0.2.2
 	github.com/opencontainers/runtime-spec v1.2.1
 )
 

@@ -9,6 +9,7 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
+	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 	"github.com/sazonovItas/mini-ci/worker/runtime/network"
 )
 
@@ -48,6 +49,7 @@ type Runtime struct {
 	ioManager IOManager
 	killer    Killer
 	network   Network
+	logger    logging.Logger
 
 	dataStorePath string
 }
@@ -73,6 +75,10 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 		if err != nil {
 			return nil, fmt.Errorf("new data store: %w", err)
 		}
+	}
+
+	if r.logger == nil {
+		r.logger = logging.NewJSONLogger(r.dataStorePath)
 	}
 
 	if r.network == nil {
