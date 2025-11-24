@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 	"github.com/sazonovItas/mini-ci/worker/runtime/store"
@@ -30,10 +31,23 @@ func NewDataStore(dataStorePath string) (*dataStore, error) {
 	return data, nil
 }
 
+func (ds dataStore) New(id string) error {
+	return filesystem.WithLock(ds.store.Location(containersDir), func() error {
+		dir := ds.Location(id)
+
+		if err := os.MkdirAll(dir, os.FileMode(0o700)); err != nil {
+			// TODO: add normal error from the errdefs
+			return err
+		}
+
+		return nil
+	})
+}
+
 func (ds dataStore) Cleanup(id string) error {
 	return filesystem.WithLock(ds.store.Location(containersDir), func() error {
 		if err := ds.store.Delete(containersDir, id); err != nil {
-			return fmt.Errorf("cleanup container dir %s: %w", id, err)
+			return fmt.Errorf("clean up container dir %s: %w", id, err)
 		}
 
 		return nil

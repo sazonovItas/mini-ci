@@ -103,12 +103,6 @@ func (n network) setupNetNs() (*netns.NetNS, error) {
 }
 
 func (n network) setupContainerFiles(id string) error {
-	// TODO: add filestore instead of just getting pathes and creating
-	// parents dirs all the way through or just refactor it to make it look prettier
-	if err := os.MkdirAll(filepath.Join(n.dataStore, containersDir, id), (0o711)); err != nil {
-		return errors.Join(ErrInternal, err)
-	}
-
 	if err := n.setupHostname(id); err != nil {
 		return err
 	}

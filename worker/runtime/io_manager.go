@@ -1,36 +1,48 @@
 package runtime
 
 import (
+	"io"
 	"sync"
 
 	"github.com/containerd/containerd/v2/pkg/cio"
 )
 
+type TaskIO struct {
+	StdoutR io.Reader
+	StdoutW io.WriteCloser
+	StderrR io.Reader
+	StderrW io.WriteCloser
+}
+
+type IOs map[string]TaskIO
+
 type ContainerIOs map[string]cio.IO
 
 type ioManager struct {
-	ioReaders ContainerIOs
-	lock      sync.Mutex
+	ios  IOs
+	cios ContainerIOs
+	lock sync.Mutex
 }
 
 var _ IOManager = (*ioManager)(nil)
 
 func NewIOManager() *ioManager {
 	return &ioManager{
-		ioReaders: ContainerIOs{},
-		lock:      sync.Mutex{},
+		ios:  IOs{},
+		cios: ContainerIOs{},
+		lock: sync.Mutex{},
 	}
 }
 
-func (io *ioManager) Creator(containerID string, creator cio.Creator) cio.Creator {
+func (iom *ioManager) Creator(id string, creator cio.Creator) cio.Creator {
 	return func(id string) (cio.IO, error) {
-		io.lock.Lock()
-		defer io.lock.Unlock()
-		prevIO, exists := io.ioReaders[containerID]
+		iom.lock.Lock()
+		defer iom.lock.Unlock()
+		prevIO, exists := iom.cios[id]
 
-		newCIO, err := creator(containerID)
+		newCIO, err := creator(id)
 		if newCIO != nil {
-			io.ioReaders[containerID] = newCIO
+			iom.cios[id] = newCIO
 
 			if exists && prevIO != nil {
 				prevIO.Cancel()
@@ -41,34 +53,38 @@ func (io *ioManager) Creator(containerID string, creator cio.Creator) cio.Creato
 	}
 }
 
-func (io *ioManager) Attach(containerID string, attach cio.Attach) cio.Attach {
-	return func(f *cio.FIFOSet) (cio.IO, error) {
-		io.lock.Lock()
-		defer io.lock.Unlock()
-		prevIO, exists := io.ioReaders[containerID]
+func (iom *ioManager) TaskIO(id string) TaskIO {
+	iom.lock.Lock()
+	defer iom.lock.Unlock()
 
-		newCIO, err := attach(f)
-		if newCIO != nil {
-			io.ioReaders[containerID] = newCIO
-
-			if exists && prevIO != nil {
-				prevIO.Cancel()
-			}
-		}
-
-		return newCIO, err
+	taskIO, ok := iom.ios[id]
+	if ok {
+		return taskIO
 	}
+
+	stdoutR, stdoutW := io.Pipe()
+	stderrR, stderrW := io.Pipe()
+
+	taskIO = TaskIO{
+		StdoutR: stdoutR,
+		StdoutW: stdoutW,
+		StderrR: stderrR,
+		StderrW: stderrW,
+	}
+
+	iom.ios[id] = taskIO
+
+	return taskIO
 }
 
-func (io *ioManager) Get(containerID string) (cio.IO, bool) {
-	io.lock.Lock()
-	defer io.lock.Unlock()
-	cIO, exists := io.ioReaders[containerID]
-	return cIO, exists
-}
+func (iom *ioManager) Delete(id string) {
+	iom.lock.Lock()
+	defer iom.lock.Unlock()
 
-func (io *ioManager) Delete(containerID string) {
-	io.lock.Lock()
-	defer io.lock.Unlock()
-	delete(io.ioReaders, containerID)
+	if taskIO, exists := iom.ios[id]; exists {
+		_, _ = taskIO.StdoutW.Close(), taskIO.StderrW.Close()
+	}
+
+	delete(iom.ios, id)
+	delete(iom.cios, id)
 }

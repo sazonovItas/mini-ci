@@ -3,13 +3,24 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/signal"
 	"syscall"
 
 	containerd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/worker/runtime"
+	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 )
+
+func init() {
+	if err := log.SetFormat(log.TextFormat); err != nil {
+		panic(err)
+	}
+
+	if err := log.SetLevel(log.DebugLevel.String()); err != nil {
+		panic(err)
+	}
+}
 
 func main() {
 	ctx := context.Background()
@@ -21,11 +32,12 @@ func main() {
 	defer func() {
 		_ = client.Close()
 	}()
-
 	r, err := runtime.NewRuntime(client)
 	if err != nil {
 		panic(err)
 	}
+
+	jsonLogger := logging.NewJSONLogger("/var/lib/minici")
 
 	containerSpec := runtime.ContainerSpec{
 		Image: "docker.io/library/alpine:3.22",
@@ -40,15 +52,13 @@ func main() {
 
 				ping -c 2 archlinux.org
 
+				apk update && apk add curl
+
+				curl -L archlinux.org
+
 				ip addr
 			`,
 		},
-	}
-
-	taskIO := runtime.TaskIO{
-		Stdin:  nil,
-		Stdout: os.Stdout,
-		Stderr: os.Stdout,
 	}
 
 	container, err := r.Create(ctx, containerSpec)
@@ -61,11 +71,11 @@ func main() {
 		}
 	}()
 
-	if err := container.NewTask(ctx, taskSpec, taskIO); err != nil {
+	if err := container.NewTask(ctx, taskSpec); err != nil {
 		panic(err)
 	}
 
-	task, err := container.Start(ctx)
+	task, err := container.Start(ctx, jsonLogger)
 	if err != nil {
 		panic(err)
 	}
@@ -99,11 +109,11 @@ func main() {
 		},
 	}
 
-	if err := container.NewTask(ctx, taskSpec, taskIO); err != nil {
+	if err := container.NewTask(ctx, taskSpec); err != nil {
 		panic(err)
 	}
 
-	task, err = container.Start(ctx)
+	task, err = container.Start(ctx, jsonLogger)
 	if err != nil {
 		panic(err)
 	}

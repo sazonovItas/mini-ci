@@ -15,7 +15,7 @@ type jsonLogEntry struct {
 	Time   time.Time `json:"time,omitzero"`
 }
 
-func newJsonLogEntry(log, stream string) jsonLogEntry {
+func newJSONLogEntry(log, stream string) jsonLogEntry {
 	return jsonLogEntry{
 		Log:    log,
 		Stream: stream,
@@ -47,10 +47,14 @@ func (l jsonLogger) Process(id string, stdout <-chan string, stderr <-chan strin
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	w := bufio.NewWriter(file)
-	defer w.Flush()
+	defer func() {
+		_ = w.Flush()
+	}()
 
 	for !isOutClosed || !isErrClosed {
 		select {
@@ -79,7 +83,7 @@ func (l jsonLogger) Process(id string, stdout <-chan string, stderr <-chan strin
 }
 
 func (l jsonLogger) writeLog(w io.Writer, log, stream string) error {
-	entry := newJsonLogEntry(log, stream)
+	entry := newJSONLogEntry(log, stream)
 
 	data, err := json.Marshal(entry)
 	if err != nil {
@@ -97,5 +101,5 @@ func (l jsonLogger) writeLog(w io.Writer, log, stream string) error {
 }
 
 func (l jsonLogger) getLogFilePath(id string) string {
-	return filepath.Join(l.dataStore, "containers", id, "log.json")
+	return filepath.Join(l.dataStore, "containers", id, id+"-json.log")
 }

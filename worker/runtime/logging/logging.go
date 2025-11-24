@@ -5,14 +5,14 @@ import (
 	"context"
 	"errors"
 	"io"
-	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/log"
 	"github.com/muesli/cancelreader"
-	"github.com/sazonovItas/mini-ci/worker/runtime/filesystem"
 )
 
 type Logger interface {
@@ -24,10 +24,33 @@ type LogIO struct {
 	Stderr io.Reader
 }
 
-func ProcessLogs(parentCtx context.Context, container containerd.Container, logIO LogIO, loggers ...Logger) error {
+func ProcessLogs(
+	parentCtx context.Context,
+	container containerd.Container,
+	logIO LogIO,
+	loggers ...Logger,
+) error {
+	if len(loggers) == 0 {
+		return nil
+	}
+
+	logger := loggers[0]
+	if len(loggers) > 1 {
+		logger = NewMultiLogger(loggers...)
+	}
+
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
+	return processLogs(ctx, container, logIO, logger)
+}
+
+func processLogs(
+	ctx context.Context,
+	container containerd.Container,
+	logIO LogIO,
+	logger Logger,
+) error {
 	stdoutR, err := cancelreader.NewReader(logIO.Stdout)
 	if err != nil {
 		return err
@@ -48,9 +71,10 @@ func ProcessLogs(parentCtx context.Context, container containerd.Container, logI
 	pipeStderrR, pipeStderrW := io.Pipe()
 	copyStream := func(reader io.Reader, writer *io.PipeWriter) {
 		buf := make([]byte, 32<<10)
+
 		_, err := io.CopyBuffer(writer, reader, buf)
-		if err != nil {
-			// TODO: add logs
+		if err != nil && !errors.Is(err, cancelreader.ErrCanceled) {
+			log.G(ctx).WithError(err).Error("failed to copy stream")
 		}
 	}
 
@@ -58,12 +82,8 @@ func ProcessLogs(parentCtx context.Context, container containerd.Container, logI
 	go copyStream(stderrR, pipeStderrW)
 
 	var wg sync.WaitGroup
-	processLogFunc := func(reader io.Reader, chs ...chan string) {
-		defer func() {
-			for _, ch := range chs {
-				close(ch)
-			}
-		}()
+	processLogFunc := func(reader io.Reader, ch chan string) {
+		defer close(ch)
 
 		r := bufio.NewReader(reader)
 
@@ -74,41 +94,38 @@ func ProcessLogs(parentCtx context.Context, container containerd.Container, logI
 
 		for err == nil {
 			s, err = r.ReadString('\n')
-			if s != "" {
-				for _, ch := range chs {
-					ch <- s
-				}
+			if log := strings.TrimSuffix(s, "\n"); log != "" {
+				ch <- log
 			}
 
 			if err != nil && !errors.Is(err, io.EOF) {
-				// TODO: add logs
+				log.G(ctx).WithError(err).Error("failed to read log")
 			}
 		}
 	}
 
-	stdouts := make([]chan string, len(loggers))
-	stderrs := make([]chan string, len(loggers))
-	for i := range len(loggers) {
-		stdouts[i] = make(chan string, 10000)
-		stderrs[i] = make(chan string, 10000)
+	stdout := make(chan string, 100)
+	stderr := make(chan string, 100)
+	wg.Go(func() {
+		if err := logger.Process(container.ID(), stdout, stderr); err != nil {
+			log.G(ctx).WithError(err).Error("logger failed to process logs")
+		}
+	})
 
-		wg.Go(func() {
-			if err := loggers[i].Process(container.ID(), stdouts[i], stderrs[i]); err != nil {
-				// TODO: add logs
-			}
-		})
-	}
-
-	wg.Go(func() { processLogFunc(pipeStdoutR, stdouts...) })
-	wg.Go(func() { processLogFunc(pipeStderrR, stderrs...) })
+	wg.Go(func() { processLogFunc(pipeStdoutR, stdout) })
+	wg.Go(func() { processLogFunc(pipeStderrR, stderr) })
 
 	go func() {
-		defer pipeStdoutW.Close()
-		defer pipeStderrW.Close()
+		defer func() {
+			_ = pipeStdoutW.Close()
+		}()
+		defer func() {
+			_ = pipeStderrW.Close()
+		}()
 
 		exitch, err := getContainerWait(ctx, container)
 		if err != nil {
-			// TODO: add logs
+			log.G(ctx).WithError(err).Error("failed to get container wait")
 			return
 		}
 
@@ -120,7 +137,10 @@ func ProcessLogs(parentCtx context.Context, container containerd.Container, logI
 	return nil
 }
 
-func getContainerWait(ctx context.Context, container containerd.Container) (<-chan containerd.ExitStatus, error) {
+func getContainerWait(
+	ctx context.Context,
+	container containerd.Container,
+) (<-chan containerd.ExitStatus, error) {
 	task, err := container.Task(ctx, nil)
 	if err == nil {
 		return task.Wait(ctx)
@@ -148,14 +168,4 @@ func getContainerWait(ctx context.Context, container containerd.Container) (<-ch
 			return task.Wait(ctx)
 		}
 	}
-}
-
-func waitForLogger(dataStore, id string) error {
-	return filesystem.WithLock(getLockPath(dataStore, id), func() error {
-		return nil
-	})
-}
-
-func getLockPath(dataStore, id string) string {
-	return filepath.Join(dataStore, "containers", id, "log-lock")
 }

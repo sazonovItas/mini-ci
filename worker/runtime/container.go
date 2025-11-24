@@ -8,13 +8,15 @@ import (
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 )
 
 type Container struct {
-	container containerd.Container
-	ioManager IOManager
 	killer    Killer
+	ioManager IOManager
+	container containerd.Container
 }
 
 func NewContainer(
@@ -23,9 +25,9 @@ func NewContainer(
 	killer Killer,
 ) *Container {
 	return &Container{
-		container: container,
-		ioManager: ioManager,
 		killer:    killer,
+		ioManager: ioManager,
+		container: container,
 	}
 }
 
@@ -37,11 +39,51 @@ func (c *Container) Container() containerd.Container {
 	return c.container
 }
 
-func (c *Container) Start(ctx context.Context) (*Task, error) {
+func (c *Container) NewTask(ctx context.Context, spec TaskSpec) error {
+	ociSpec, err := c.container.Spec(ctx)
+	if err != nil {
+		return fmt.Errorf("container spec: %w", err)
+	}
+
+	err = c.container.Update(
+		ctx,
+		containerd.UpdateContainerOpts(
+			containerd.WithSpec(ociSpec, taskOCISpecOpts(spec)...),
+		),
+	)
+	if err != nil {
+		return fmt.Errorf("update oci spec: %w", err)
+	}
+
+	taskIO := c.ioManager.TaskIO(c.ID())
+	ioCreator := c.ioManager.Creator(c.ID(), cio.NewCreator(containerCIO(taskIO, false)...))
+
+	task, err := c.container.NewTask(ctx, ioCreator)
+	if err != nil {
+		return fmt.Errorf("create new task: %w", err)
+	}
+
+	if err := task.CloseIO(ctx, containerd.WithStdinCloser); err != nil {
+		return fmt.Errorf("close stdin stream: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Container) Start(ctx context.Context, loggers ...logging.Logger) (*Task, error) {
 	task, err := c.container.Task(ctx, cio.Load)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve task: %w", err)
 	}
+
+	taskIO := c.ioManager.TaskIO(c.ID())
+	logIO := logging.LogIO{Stdout: taskIO.StdoutR, Stderr: taskIO.StderrR}
+
+	go func() {
+		if err := logging.ProcessLogs(ctx, c.Container(), logIO, loggers...); err != nil {
+			log.G(ctx).WithError(err).Error("failed to process task logs")
+		}
+	}()
 
 	if err := task.Start(ctx); err != nil {
 		return nil, fmt.Errorf("task start: %w", err)
@@ -53,34 +95,6 @@ func (c *Container) Start(ctx context.Context) (*Task, error) {
 	}
 
 	return NewTask(task, taskWaitStatus), nil
-}
-
-func (c *Container) Attach(ctx context.Context, taskIO TaskIO) (*Task, error) {
-	ioAttach := c.ioManager.Attach(
-		c.ID(),
-		cio.NewAttach(containerCIO(taskIO, false)...),
-	)
-
-	task, err := c.container.Task(ctx, ioAttach)
-	if err != nil {
-		return nil, fmt.Errorf("retrieve task: %w", err)
-	}
-
-	status, err := task.Status(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("task status: %w", err)
-	}
-
-	if status.Status != containerd.Running {
-		return nil, fmt.Errorf("task is not running: status = %s", status.Status)
-	}
-
-	waitTaskStatus, err := task.Wait(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("task wait: %w", err)
-	}
-
-	return NewTask(task, waitTaskStatus), nil
 }
 
 func (c *Container) Stop(ctx context.Context, kill bool) error {
@@ -100,50 +114,22 @@ func (c *Container) Stop(ctx context.Context, kill bool) error {
 	return nil
 }
 
-func (c *Container) NewTask(ctx context.Context, spec TaskSpec, taskIO TaskIO) error {
-	ociSpec, err := c.container.Spec(ctx)
-	if err != nil {
-		return fmt.Errorf("container spec: %w", err)
-	}
-
-	err = c.container.Update(
-		ctx,
-		containerd.UpdateContainerOpts(containerd.WithSpec(ociSpec, taskOCISpecOpts(spec)...)),
-	)
-	if err != nil {
-		return fmt.Errorf("update oci spec: %w", err)
-	}
-
-	ioCreator := c.ioManager.Creator(c.ID(), cio.NewCreator(containerCIO(taskIO, false)...))
-
-	task, err := c.container.NewTask(ctx, ioCreator)
-	if err != nil {
-		return fmt.Errorf("create new task: %w", err)
-	}
-
-	if err := task.CloseIO(ctx, containerd.WithStdinCloser); err != nil {
-		return fmt.Errorf("close stdin stream: %w", err)
-	}
-
-	return nil
-}
-
 func containerCIO(taskIO TaskIO, tty bool) []cio.Opt {
 	if !tty {
 		return []cio.Opt{
 			cio.WithStreams(
-				taskIO.Stdin,
-				taskIO.Stdout,
-				taskIO.Stderr,
+				nil,
+				taskIO.StdoutW,
+				taskIO.StderrW,
 			),
 		}
 	}
 
 	opts := []cio.Opt{
 		cio.WithStreams(
-			taskIO.Stdin,
-			taskIO.Stdout,
-			taskIO.Stderr,
+			nil,
+			taskIO.StdoutW,
+			taskIO.StderrW,
 		),
 		cio.WithTerminal,
 	}
@@ -151,7 +137,7 @@ func containerCIO(taskIO TaskIO, tty bool) []cio.Opt {
 	return opts
 }
 
-func containerOciSpecOpts(
+func containerOCISpecOpts(
 	image containerd.Image,
 	spec ContainerSpec,
 	netNsPath string,

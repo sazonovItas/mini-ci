@@ -9,7 +9,6 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
-	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 	"github.com/sazonovItas/mini-ci/worker/runtime/network"
 )
 
@@ -18,13 +17,13 @@ type Killer interface {
 }
 
 type IOManager interface {
+	TaskIO(containerID string) TaskIO
 	Creator(containerID string, creator cio.Creator) (wrapCreator cio.Creator)
-	Attach(containerID string, attach cio.Attach) (wrapAttach cio.Attach)
-	Get(containerID string) (io cio.IO, exists bool)
 	Delete(containerID string)
 }
 
 type DataStore interface {
+	New(id string) error
 	Set(content []byte, id string, keys ...string) error
 	Get(id string, keys ...string) (content []byte, err error)
 	Location(id string, keys ...string) (path string)
@@ -43,15 +42,13 @@ const (
 )
 
 type Runtime struct {
-	client *containerd.Client
+	client        *containerd.Client
+	dataStorePath string
 
 	dataStore DataStore
 	ioManager IOManager
 	killer    Killer
 	network   Network
-	logger    logging.Logger
-
-	dataStorePath string
 }
 
 type RuntimeOpt func(r *Runtime)
@@ -77,10 +74,6 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 		}
 	}
 
-	if r.logger == nil {
-		r.logger = logging.NewJSONLogger(r.dataStorePath)
-	}
-
 	if r.network == nil {
 		r.network, err = network.NewNetwork(defaultDataStorePath)
 		if err != nil {
@@ -99,8 +92,41 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 	return r, nil
 }
 
+func (r *Runtime) Pull(ctx context.Context, imageRef string) error {
+	_, err := r.client.Pull(ctx, imageRef, containerd.WithPullUnpack)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Runtime) ensureImageExists(ctx context.Context, imageRef string) (containerd.Image, error) {
+	storeImage, err := r.client.ImageService().Get(ctx, imageRef)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			image, err := r.client.Pull(ctx, imageRef, containerd.WithPullUnpack)
+			if err != nil {
+				return nil, err
+			}
+
+			return image, nil
+		}
+
+		return nil, err
+	}
+
+	image := containerd.NewImage(r.client, storeImage)
+
+	return image, nil
+}
+
 func (r *Runtime) Create(ctx context.Context, spec ContainerSpec) (*Container, error) {
 	id := idgen.ID()
+
+	if err := r.dataStore.New(id); err != nil {
+		return nil, err
+	}
 
 	netConfig, err := r.network.Setup(ctx, id)
 	if err != nil {
@@ -121,12 +147,12 @@ func (r *Runtime) createContainer(
 	spec ContainerSpec,
 	netConfig network.NetworkConfig,
 ) (*Container, error) {
-	image, err := r.client.Pull(ctx, spec.Image)
+	image, err := r.ensureImageExists(ctx, spec.Image)
 	if err != nil {
 		return nil, fmt.Errorf("pulling image: %w", err)
 	}
 
-	ociOpts := containerOciSpecOpts(image, spec, netConfig.NetNsPath, r.network.Mounts(id))
+	ociOpts := containerOCISpecOpts(image, spec, netConfig.NetNsPath, r.network.Mounts(id))
 
 	ctr, err := r.client.NewContainer(
 		ctx, id,
