@@ -58,7 +58,7 @@ type RuntimeOpt func(r *Runtime)
 
 func WithSnapshotter(snapshotter string) RuntimeOpt {
 	return func(r *Runtime) {
-		r.snapshotter = defaultSnapshotter
+		r.snapshotter = snapshotter
 	}
 }
 
@@ -169,7 +169,7 @@ func (r *Runtime) ensureImageExists(ctx context.Context, imageRef string) (conta
 	return image, nil
 }
 
-func (r *Runtime) Create(ctx context.Context, spec ContainerSpec) (*Container, error) {
+func (r *Runtime) Create(ctx context.Context, spec ContainerConfig) (*Container, error) {
 	id := idgen.ID()
 	if err := r.dataStore.New(id); err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (r *Runtime) Create(ctx context.Context, spec ContainerSpec) (*Container, e
 func (r *Runtime) createContainer(
 	ctx context.Context,
 	id string,
-	spec ContainerSpec,
+	spec ContainerConfig,
 	netConfig network.NetworkConfig,
 ) (*Container, error) {
 	image, err := r.ensureImageExists(ctx, spec.Image)

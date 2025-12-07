@@ -1,0 +1,4 @@
+runtime:
+  address: /var/run/containerd.sock
+  snapshotter: overlayfs
+  data_store_path: /var/lib/minici

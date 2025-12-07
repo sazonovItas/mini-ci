@@ -34,30 +34,36 @@ func main() {
 	defer func() {
 		_ = client.Close()
 	}()
-	r, err := runtime.New(client)
+	r, err := runtime.New(client, runtime.WithSnapshotter("fuse-overlayfs"))
 	if err != nil {
 		panic(err)
 	}
 
 	jsonLogger := logging.NewJSONLogger("/var/lib/minici")
 
-	containerSpec := runtime.ContainerSpec{
-		Image: "docker.io/library/alpine:3.22",
-		Mounts: []runtime.MountSpec{
+	containerSpec := runtime.ContainerConfig{
+		Image: "docker.io/library/centos:centos7",
+		Mounts: []runtime.MountConfig{
 			{
 				Src: "/var/lib",
-				Dst: "/test/test",
+				Dst: "/test",
 			},
 		},
 	}
 
-	taskSpec := runtime.TaskSpec{
+	taskSpec := runtime.TaskConfig{
 		Command: []string{"sh", "-c"},
 		Args: []string{
 			`
 				set -xeu
 
-				ls -la /test/test
+				ls -la /test
+
+				cat /etc/resolv.conf
+
+				dnf update && dnf install curl
+
+				curl -L archlinux.org
 			`,
 		},
 	}

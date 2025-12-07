@@ -24,6 +24,10 @@ func NewDataStore(dataStorePath string) (*dataStore, error) {
 		return nil, err
 	}
 
+	if err := os.MkdirAll(fileStore.Location(containersDir), os.FileMode(0o700)); err != nil {
+		return nil, fmt.Errorf("failed create containers directory: %w", err)
+	}
+
 	data := &dataStore{
 		store: fileStore,
 	}

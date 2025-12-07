@@ -1,18 +1,18 @@
 package runtime
 
-type TaskSpec struct {
+type TaskConfig struct {
 	Command []string
 	Args    []string
 }
 
-type ContainerSpec struct {
+type ContainerConfig struct {
 	Image  string
 	Cwd    string
 	Env    []string
-	Mounts []MountSpec
+	Mounts []MountConfig
 }
 
-type MountSpec struct {
+type MountConfig struct {
 	Src      string
 	Dst      string
 	Readonly bool

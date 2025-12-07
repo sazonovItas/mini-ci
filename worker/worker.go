@@ -48,7 +48,10 @@ func newContainerRuntime(cfg config.RuntimeConfig) (*runtime.Runtime, error) {
 		return nil, fmt.Errorf("new containerd client: %w", err)
 	}
 
-	r, err := runtime.New(client, runtime.WithDataStorePath(cfg.Storage.Path))
+	r, err := runtime.New(client,
+		runtime.WithSnapshotter(cfg.Snapshotter),
+		runtime.WithDataStorePath(cfg.DataStorePath),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("new container runtime: %w", err)
 	}

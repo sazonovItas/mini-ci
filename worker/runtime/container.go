@@ -40,7 +40,7 @@ func (c *Container) Container() containerd.Container {
 	return c.container
 }
 
-func (c *Container) NewTask(ctx context.Context, spec TaskSpec) error {
+func (c *Container) NewTask(ctx context.Context, spec TaskConfig) error {
 	ociSpec, err := c.container.Spec(ctx)
 	if err != nil {
 		return fmt.Errorf("container spec: %w", err)
@@ -48,9 +48,7 @@ func (c *Container) NewTask(ctx context.Context, spec TaskSpec) error {
 
 	err = c.container.Update(
 		ctx,
-		containerd.UpdateContainerOpts(
-			containerd.WithSpec(ociSpec, taskOCISpecOpts(spec)...),
-		),
+		containerd.UpdateContainerOpts(containerd.WithSpec(ociSpec, taskOCISpecOpts(spec)...)),
 	)
 	if err != nil {
 		return fmt.Errorf("update oci spec: %w", err)
@@ -140,7 +138,7 @@ func containerCIO(taskIO TaskIO, tty bool) []cio.Opt {
 
 func containerOCISpecOpts(
 	image containerd.Image,
-	spec ContainerSpec,
+	spec ContainerConfig,
 	netNsPath string,
 	netMounts []specs.Mount,
 ) []oci.SpecOpts {
@@ -174,7 +172,7 @@ func containerOCISpecOpts(
 	return opts
 }
 
-func taskOCISpecOpts(spec TaskSpec) []oci.SpecOpts {
+func taskOCISpecOpts(spec TaskConfig) []oci.SpecOpts {
 	var opts []oci.SpecOpts
 	if len(spec.Command) != 0 {
 		args := slices.Clone(spec.Command)
@@ -188,7 +186,7 @@ func taskOCISpecOpts(spec TaskSpec) []oci.SpecOpts {
 	return opts
 }
 
-func ociMount(spec MountSpec) specs.Mount {
+func ociMount(spec MountConfig) specs.Mount {
 	mount := specs.Mount{
 		Type:        "bind",
 		Source:      spec.Src,
