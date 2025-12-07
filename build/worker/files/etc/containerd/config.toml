@@ -1,0 +1,12 @@
+version = 2
+
+[proxy_plugins]
+# fuse-overlayfs is used for rootless
+  [proxy_plugins."fuse-overlayfs"]
+    type = "snapshot"
+    address = "/run/containerd-fuse-overlayfs.sock"
+
+[plugins."io.containerd.grpc.v1.cri".containerd]
+  discard_unpacked_layers = true
+  snapshotter = "fuse-overlayfs"
+  default_runtime_name = "runc"

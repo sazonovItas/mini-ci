@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -91,12 +91,12 @@ func (n network) Setup(ctx context.Context, id string) (NetworkConfig, error) {
 
 func (n network) setupNetNs() (*netns.NetNS, error) {
 	if err := os.MkdirAll(netNsBaseDir, os.FileMode(0o711)); err != nil {
-		return nil, errors.Join(ErrMkdirNetNsBaseDir, err)
+		return nil, fmt.Errorf("%w: %w", ErrMkdirNetNsBaseDir, err)
 	}
 
 	ns, err := netns.NewNetNS(netNsBaseDir)
 	if err != nil {
-		return nil, errors.Join(ErrNewNetNs, err)
+		return nil, fmt.Errorf("%w: %w", ErrNewNetNs, err)
 	}
 
 	return ns, nil
@@ -121,7 +121,7 @@ func (n network) setupContainerFiles(id string) error {
 func (n network) setupHostname(id string) error {
 	err := os.WriteFile(n.getHostNamePath(id), []byte(idgen.ShortID(id)), privateFilePerm)
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return fmt.Errorf("%w: %w", ErrSetupHostname, err)
 	}
 
 	return nil
@@ -130,23 +130,29 @@ func (n network) setupHostname(id string) error {
 func (n network) setupHosts(id string) error {
 	err := os.WriteFile(n.getHostsPath(id), []byte("127.0.0.1 localhost\n"), privateFilePerm)
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return fmt.Errorf("%w: %w", ErrSetupHosts, err)
 	}
 
 	return nil
 }
 
-func (n network) setupResolvConf(id string) error {
+func (n network) setupResolvConf(id string) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrSetupResolvConf, err)
+		}
+	}()
+
 	content, err := os.ReadFile(resolvConfPath())
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return err
 	}
 
 	nameservers := getNameservers(content, IP)
 
 	resolvConf := bytes.NewBuffer(nil)
 	for _, ns := range nameservers {
-		_, err := resolvConf.Write([]byte("nameserver " + ns + "\n"))
+		_, err = resolvConf.Write([]byte("nameserver " + ns + "\n"))
 		if err != nil {
 			return err
 		}
@@ -154,7 +160,7 @@ func (n network) setupResolvConf(id string) error {
 
 	err = os.WriteFile(n.getResolvConfPath(id), resolvConf.Bytes(), privateFilePerm)
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return err
 	}
 
 	return nil
@@ -177,7 +183,7 @@ func (n network) Cleanup(ctx context.Context, id string) error {
 	ns := netns.LoadNetNS(config.NetNsPath)
 	if ns != nil {
 		if err := ns.Remove(); err != nil {
-			return errors.Join(ErrRemoveNetNs, err)
+			return fmt.Errorf("%w: %w", ErrRemoveNetNs, err)
 		}
 	}
 
@@ -242,29 +248,40 @@ func networkConfig(netNsPath string, result *gocni.Result) (NetworkConfig, error
 	return config, nil
 }
 
-func (n network) saveConfig(id string, config NetworkConfig) error {
+func (n network) saveConfig(id string, config NetworkConfig) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrSaveNetConfig, err)
+		}
+	}()
+
 	configJSON, err := json.Marshal(config)
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return err
 	}
 
 	err = os.WriteFile(n.getNetworkConfigPath(id), configJSON, privateFilePerm)
 	if err != nil {
-		return errors.Join(ErrInternal, err)
+		return err
 	}
 
 	return nil
 }
 
-func (n network) loadConfig(id string) (NetworkConfig, error) {
+func (n network) loadConfig(id string) (config NetworkConfig, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrLoadNetConfig, err)
+		}
+	}()
+
 	content, err := os.ReadFile(n.getNetworkConfigPath(id))
 	if err != nil {
-		return NetworkConfig{}, errors.Join(ErrInternal, err)
+		return NetworkConfig{}, err
 	}
 
-	var config NetworkConfig
-	if err := json.Unmarshal(content, &config); err != nil {
-		return NetworkConfig{}, errors.Join(ErrInternal, err)
+	if err = json.Unmarshal(content, &config); err != nil {
+		return NetworkConfig{}, err
 	}
 
 	return config, nil

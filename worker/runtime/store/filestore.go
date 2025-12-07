@@ -26,7 +26,7 @@ func NewFileStore(rootPath string, dirPerm os.FileMode, filePerm os.FileMode) (*
 	}
 
 	if err := os.MkdirAll(rootPath, dirPerm); err != nil {
-		return nil, errors.Join(ErrSystemFailure, err)
+		return nil, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	fileStore := &fileStore{
@@ -53,7 +53,7 @@ func (s *fileStore) Exists(keys ...string) (bool, error) {
 			return false, nil
 		}
 
-		return false, errors.Join(ErrSystemFailure, err)
+		return false, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	return true, nil
@@ -65,19 +65,19 @@ func (s *fileStore) Get(keys ...string) ([]byte, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.Join(ErrNotFound, fmt.Errorf("%q does not exist", path))
+			return nil, fmt.Errorf("%w: %q does not exist", ErrNotFound, path)
 		}
 
-		return nil, errors.Join(ErrSystemFailure, err)
+		return nil, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	if stat.IsDir() {
-		return nil, errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be read as a file", path))
+		return nil, fmt.Errorf("%w: %q is a directory and cannot be read as a file", ErrInvalidArgument, path)
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Join(ErrSystemFailure, err)
+		return nil, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	return content, nil
@@ -89,19 +89,19 @@ func (s *fileStore) List(keys ...string) ([]string, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.Join(ErrNotFound, err)
+			return nil, fmt.Errorf("%w: %w", ErrNotFound, err)
 		}
 
-		return nil, errors.Join(ErrSystemFailure, err)
+		return nil, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	if !stat.IsDir() {
-		return nil, errors.Join(ErrInternal, fmt.Errorf("%q is not a directory and cannot be listed", path))
+		return nil, fmt.Errorf("%w: %q is not a directory and cannot be listed", ErrInvalidArgument, path)
 	}
 
 	dirEntries, err := os.ReadDir(path)
 	if err != nil {
-		return nil, errors.Join(ErrSystemFailure, err)
+		return nil, fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	entries := make([]string, 0, len(dirEntries))
@@ -117,7 +117,7 @@ func (s *fileStore) Set(content []byte, keys ...string) error {
 		parent := s.Location(keys[0 : len(keys)-1]...)
 
 		if err := os.MkdirAll(parent, s.dirPerm); err != nil {
-			return errors.Join(ErrSystemFailure, err)
+			return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 		}
 	}
 
@@ -125,17 +125,17 @@ func (s *fileStore) Set(content []byte, keys ...string) error {
 
 	stat, err := os.Stat(dest)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	if err == nil {
 		if stat.IsDir() {
-			return errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be written to", dest))
+			return fmt.Errorf("%w: %q is a directory and cannot be written to", ErrInvalidArgument, err)
 		}
 	}
 
 	if err := os.WriteFile(dest, content, s.filePerm); err != nil {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	return nil
@@ -146,7 +146,7 @@ func (s *fileStore) Append(content []byte, keys ...string) error {
 		parent := s.Location(keys[0 : len(keys)-1]...)
 
 		if err := os.MkdirAll(parent, s.dirPerm); err != nil {
-			return errors.Join(ErrSystemFailure, err)
+			return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 		}
 	}
 
@@ -154,23 +154,23 @@ func (s *fileStore) Append(content []byte, keys ...string) error {
 
 	stat, err := os.Stat(dest)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	if err != nil && stat.IsDir() {
-		return errors.Join(ErrInternal, fmt.Errorf("%q is a directory and cannot be written to", dest))
+		return fmt.Errorf("%w: %q is a directory and cannot be written to", err, dest)
 	}
 
 	file, err := os.OpenFile(dest, os.O_CREATE|os.O_APPEND, s.filePerm)
 	if err != nil {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 	defer func() {
 		_ = file.Close()
 	}()
 
 	if _, err := file.Write(content); err != nil {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	return nil
@@ -182,22 +182,22 @@ func (s *fileStore) Delete(keys ...string) error {
 	stat, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return errors.Join(ErrNotFound, err)
+			return fmt.Errorf("%w: %w", ErrNotFound, err)
 		}
 
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	if stat.IsDir() {
 		if err := os.RemoveAll(path); err != nil {
-			return errors.Join(ErrSystemFailure, err)
+			return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 		}
 
 		return nil
 	}
 
 	if err := os.Remove(path); err != nil {
-		return errors.Join(ErrSystemFailure, err)
+		return fmt.Errorf("%w: %w", ErrSystemFailure, err)
 	}
 
 	return nil

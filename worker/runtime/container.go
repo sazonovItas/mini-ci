@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/cio"
@@ -141,14 +142,14 @@ func containerOCISpecOpts(
 	image containerd.Image,
 	spec ContainerSpec,
 	netNsPath string,
-	mounts []specs.Mount,
+	netMounts []specs.Mount,
 ) []oci.SpecOpts {
 	opts := []oci.SpecOpts{
 		oci.WithDefaultPathEnv,
 		oci.WithDefaultUnixDevices,
 		oci.WithImageConfig(image),
-		oci.WithEnv(spec.Envs),
-		oci.WithMounts(mounts),
+		oci.WithEnv(spec.Env),
+		oci.WithMounts(netMounts),
 		oci.WithLinuxNamespace(
 			specs.LinuxNamespace{
 				Type: specs.NetworkNamespace,
@@ -157,8 +158,17 @@ func containerOCISpecOpts(
 		),
 	}
 
-	if spec.Dir != "" {
-		opts = append(opts, oci.WithProcessCwd(spec.Dir))
+	if spec.Cwd != "" {
+		opts = append(opts, oci.WithProcessCwd(spec.Cwd))
+	}
+
+	if len(spec.Mounts) > 0 {
+		var mounts []specs.Mount
+		for _, mount := range spec.Mounts {
+			mounts = append(mounts, ociMount(mount))
+		}
+
+		opts = append(opts, oci.WithMounts(mounts))
 	}
 
 	return opts
@@ -166,8 +176,8 @@ func containerOCISpecOpts(
 
 func taskOCISpecOpts(spec TaskSpec) []oci.SpecOpts {
 	var opts []oci.SpecOpts
-	if spec.Path != "" {
-		args := []string{spec.Path}
+	if len(spec.Command) != 0 {
+		args := slices.Clone(spec.Command)
 		if len(spec.Args) != 0 {
 			args = append(args, spec.Args...)
 		}
@@ -176,4 +186,23 @@ func taskOCISpecOpts(spec TaskSpec) []oci.SpecOpts {
 	}
 
 	return opts
+}
+
+func ociMount(spec MountSpec) specs.Mount {
+	mount := specs.Mount{
+		Type:        "bind",
+		Source:      spec.Src,
+		Destination: spec.Dst,
+	}
+
+	opts := []string{"bind"}
+	if spec.Readonly {
+		opts = append(opts, "ro")
+	} else {
+		opts = append(opts, "rw")
+	}
+
+	mount.Options = opts
+
+	return mount
 }

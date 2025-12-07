@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 
@@ -223,7 +222,7 @@ type cniNetwork struct {
 func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 	defer func() {
 		if err != nil {
-			err = errors.Join(ErrCNIInitFailed, err)
+			err = fmt.Errorf("%w: %w", ErrCNIInitFailed, err)
 		}
 	}()
 
@@ -261,7 +260,7 @@ func NewCNINetwork(opts ...CNINetworkOpt) (n *cniNetwork, err error) {
 func (n cniNetwork) Add(ctx context.Context, id string, netNsPath string) (*gocni.Result, error) {
 	result, err := n.cni.Setup(ctx, id, netNsPath)
 	if err != nil {
-		return nil, errors.Join(ErrCNIAddFailed, err)
+		return nil, fmt.Errorf("%w, %w", ErrCNIAddFailed, err)
 	}
 
 	return result, nil
@@ -269,7 +268,7 @@ func (n cniNetwork) Add(ctx context.Context, id string, netNsPath string) (*gocn
 
 func (n cniNetwork) Remove(ctx context.Context, id string, netNsPath string) error {
 	if err := n.cni.Remove(ctx, id, netNsPath); err != nil {
-		return errors.Join(ErrCNIRemoveFailed, err)
+		return fmt.Errorf("%w: %w", ErrCNIRemoveFailed, err)
 	}
 
 	return nil
@@ -277,7 +276,7 @@ func (n cniNetwork) Remove(ctx context.Context, id string, netNsPath string) err
 
 func (n cniNetwork) Check(ctx context.Context, id string, netNsPath string) error {
 	if err := n.cni.Check(ctx, id, netNsPath); err != nil {
-		return errors.Join(ErrCNICheckFailed, err)
+		return fmt.Errorf("%w: %w", ErrCNICheckFailed, err)
 	}
 
 	return nil

@@ -1,0 +1,128 @@
+ARG BASE_IMAGE=debian:bookworm-slim
+FROM ${BASE_IMAGE} AS base
+
+COPY --chmod=0755 files/usr/local/bin/* /usr/local/bin/
+
+COPY --chmod=0644 files/etc/containerd/* /etc/containerd/
+COPY --chmod=0644 files/etc/sysctl.d/* /etc/sysctl.d/
+COPY --chmod=0644 files/etc/systemd/system/* /etc/systemd/system/
+
+RUN echo "Installing packages..." \
+  && DEBIAN_FRONTEND=noninteractive clean-install \
+  systemd \
+  conntrack iptables nftables iproute2 ethtool util-linux mount kmod \
+  libseccomp2 pigz fuse-overlayfs overlayroot nfs-common open-iscsi \
+  bash ca-certificates curl jq procps \
+  && find /lib/systemd/system/sysinit.target.wants/ -name "systemd-tmpfiles-setup.service" -delete \
+  && rm -f /lib/systemd/system/multi-user.target.wants/* \
+  && rm -f /lib/systemd/system/*.wants/* \
+  && rm -f /lib/systemd/system/local-fs.target.wants/* \
+  && rm -f /lib/systemd/system/sockets.target.wants/*udev* \
+  && rm -f /lib/systemd/system/sockets.target.wants/*initctl* \
+  && rm -f /lib/systemd/system/basic.target.wants/* \
+  && echo "ReadKMsg=no" >> /etc/systemd/journald.conf \
+  && ln -s "$(which systemd)" /sbin/init
+
+RUN echo "Enabling/Disabling services..." \
+  && systemctl enable containerd-fuse-overlayfs.service \
+  && systemctl enable containerd.service \
+  && systemctl mask run-rpc_pipefs.mount
+
+# stage for go building
+FROM ${BASE_IMAGE} AS go-build
+COPY --chmod=0755 files/usr/local/bin/* /usr/local/bin/
+COPY --chmod=0755 scripts/third_party/gimme/gimme /usr/local/bin/
+COPY --chmod=0755 scripts/target-cc /usr/local/bin/
+
+RUN clean-install \
+  bash ca-certificates curl git make pkg-config \
+  crossbuild-essential-amd64 libseccomp-dev:amd64
+
+ARG GO_VERSION
+RUN eval "$(gimme "${GO_VERSION}")" \
+  && export GOTOOLCHAIN="go${GO_VERSION}" 
+
+# stage for building containerd
+FROM go-build AS build-containerd
+ARG TARGETARCH
+ARG GO_VERSION
+ARG CONTAINERD_VERSION="v2.1.4"
+ARG CONTAINERD_CLONE_URL="https://github.com/containerd/containerd"
+ARG BUILDTAGS="no_aufs no_zfs no_btrfs no_devmapper"
+RUN git clone "${CONTAINERD_CLONE_URL}" /containerd \
+  && cd /containerd \
+  && git checkout "${CONTAINERD_VERSION}" \
+  && eval "$(gimme "${GO_VERSION}")" \
+  && export GOTOOLCHAIN="go${GO_VERSION}" \
+  && export GOARCH=$TARGETARCH && export CC=$(target-cc) && export CGO_ENABLED=1 \
+  && make bin/ctr bin/containerd bin/containerd-shim-runc-v2
+
+# stage for building runc
+FROM go-build AS build-runc
+ARG TARGETARCH 
+ARG GO_VERSION
+ARG RUNC_VERSION="v1.3.0"
+ARG RUNC_CLONE_URL="https://github.com/opencontainers/runc"
+RUN git clone --filter=tree:0 "${RUNC_CLONE_URL}" /runc \
+  && cd /runc \
+  && git checkout "${RUNC_VERSION}" \
+  && eval "$(gimme "${GO_VERSION}")" \
+  && export GOTOOLCHAIN="go${GO_VERSION}" \
+  && export GOARCH=$TARGETARCH && export CC=$(target-cc) && export CGO_ENABLED=1 \
+  && make runc
+
+# stage for building cni-plugins
+FROM go-build AS build-cni
+ARG TARGETARCH GO_VERSION
+ARG CNI_PLUGINS_VERSION="v1.7.1"
+ARG CNI_PLUGINS_CLONE_URL="https://github.com/containernetworking/plugins"
+RUN git clone --filter=tree:0 "${CNI_PLUGINS_CLONE_URL}" /cni-plugins \
+  && cd /cni-plugins \
+  && git checkout "${CNI_PLUGINS_VERSION}" \
+  && eval "$(gimme "${GO_VERSION}")" \
+  && export GOTOOLCHAIN="go${GO_VERSION}" \
+  && mkdir ./bin \
+  && export GOARCH=$TARGETARCH && export CC=$(target-cc) && export CGO_ENABLED=0 \
+  && go build -o ./bin/host-local -mod=vendor ./plugins/ipam/host-local \
+  && go build -o ./bin/loopback -mod=vendor ./plugins/main/loopback \
+  && go build -o ./bin/bridge -mod=vendor ./plugins/main/bridge \
+  && go build -o ./bin/firewall -mod=vendor ./plugins/meta/firewall
+
+# stage for building containerd-fuse-overlayfs
+FROM go-build AS build-fuse-overlayfs
+ARG TARGETARCH GO_VERSION
+ARG CONTAINERD_FUSE_OVERLAYFS_VERSION="v2.1.6"
+ARG CONTAINERD_FUSE_OVERLAYFS_CLONE_URL="https://github.com/containerd/fuse-overlayfs-snapshotter"
+RUN git clone --filter=tree:0 "${CONTAINERD_FUSE_OVERLAYFS_CLONE_URL}" /fuse-overlayfs-snapshotter \
+  && cd /fuse-overlayfs-snapshotter \
+  && git checkout "${CONTAINERD_FUSE_OVERLAYFS_VERSION}" \
+  && eval "$(gimme "${GO_VERSION}")" \
+  && export GOTOOLCHAIN="go${GO_VERSION}" \
+  && export GOARCH=$TARGETARCH && export CC=$(target-cc) && export CGO_ENABLED=1 \
+  && make bin/containerd-fuse-overlayfs-grpc
+
+FROM base AS build
+COPY --from=build-containerd /containerd/bin/ctr /usr/local/bin/
+COPY --from=build-containerd /containerd/bin/containerd /usr/local/bin/
+COPY --from=build-containerd /containerd/bin/containerd-shim-runc-v2 /usr/local/bin
+RUN containerd --version
+
+COPY --from=build-runc /runc/runc /usr/local/sbin/runc
+RUN runc --version
+
+RUN mkdir -p /opt/cni/bin
+COPY --from=build-cni /cni-plugins/bin/host-local /opt/cni/bin/
+COPY --from=build-cni /cni-plugins/bin/loopback /opt/cni/bin/
+COPY --from=build-cni /cni-plugins/bin/bridge /opt/cni/bin/
+COPY --from=build-cni /cni-plugins/bin/firewall /opt/cni/bin/
+
+COPY --from=build-fuse-overlayfs /fuse-overlayfs-snapshotter/bin/containerd-fuse-overlayfs-grpc /usr/local/bin/
+
+FROM scratch
+COPY --from=build / /
+
+ENV container=docker
+
+STOPSIGNAL SIGRTMIN+3
+
+ENTRYPOINT [ "/usr/local/bin/entrypoint", "/sbin/init" ]

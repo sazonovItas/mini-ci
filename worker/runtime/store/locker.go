@@ -1,7 +1,6 @@
 package store
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -26,7 +25,7 @@ func (l *locker) Lock() error {
 
 	file, err := filesystem.Lock(l.path)
 	if err != nil {
-		return errors.Join(ErrLockFailure, err)
+		return fmt.Errorf("%w: %w", ErrLockFailure, err)
 	}
 
 	l.locked = file
@@ -36,7 +35,7 @@ func (l *locker) Lock() error {
 
 func (l *locker) Unlock() error {
 	if l.locked == nil {
-		return errors.Join(ErrCannotUnlockNotLocked, fmt.Errorf("lock is %q", l.path))
+		return fmt.Errorf("%w: lock is %q", ErrCannotUnlockNotLocked, l.path)
 	}
 
 	defer l.mu.Unlock()
@@ -46,7 +45,7 @@ func (l *locker) Unlock() error {
 	}()
 
 	if err := filesystem.Unlock(l.locked); err != nil {
-		return errors.Join(ErrLockFailure, err)
+		return fmt.Errorf("%w: %w", ErrLockFailure, err)
 	}
 
 	return nil
@@ -58,7 +57,7 @@ func (l *locker) WithLock(f func() error) (err error) {
 	}
 
 	defer func() {
-		err = errors.Join(l.Unlock(), err)
+		err = fmt.Errorf("%w: %w", l.Unlock(), err)
 	}()
 
 	return f()

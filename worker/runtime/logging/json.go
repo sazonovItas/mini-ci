@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -34,11 +35,6 @@ func NewJSONLogger(dataStore string) *jsonLogger {
 }
 
 func (l jsonLogger) Process(id string, stdout <-chan string, stderr <-chan string) error {
-	var (
-		isErrClosed = false
-		isOutClosed = false
-	)
-
 	file, err := os.OpenFile(
 		l.getLogFilePath(id),
 		os.O_CREATE|os.O_APPEND|os.O_WRONLY,
@@ -55,6 +51,11 @@ func (l jsonLogger) Process(id string, stdout <-chan string, stderr <-chan strin
 	defer func() {
 		_ = w.Flush()
 	}()
+
+	var (
+		isErrClosed = false
+		isOutClosed = false
+	)
 
 	for !isOutClosed || !isErrClosed {
 		select {
@@ -83,6 +84,8 @@ func (l jsonLogger) Process(id string, stdout <-chan string, stderr <-chan strin
 }
 
 func (l jsonLogger) writeLog(w io.Writer, log, stream string) error {
+	log = strings.TrimSuffix(log, "\n")
+
 	entry := newJSONLogEntry(log, stream)
 
 	data, err := json.Marshal(entry)

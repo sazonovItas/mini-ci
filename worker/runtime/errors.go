@@ -12,4 +12,5 @@ var (
 	ErrMissingContainerID = ErrInvalidArgument.WithMessage("missing container id")
 	ErrTaskKillTimeout    = ErrAborted.WithMessage("kill timeout exceeded")
 	ErrCNIOperationFailed = ErrInternal.WithMessage("cni operation failed")
+	ErrMakeContainerDir   = ErrInternal.WithMessage("make container directory")
 )

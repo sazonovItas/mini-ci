@@ -41,7 +41,8 @@ func (t *Task) WaitExitStatus(ctx context.Context) (int, error) {
 
 	t.task.IO().Cancel()
 	t.task.IO().Wait()
-	t.task.IO().Close()
+
+	_ = t.task.IO().Close()
 
 	_, err := t.task.Delete(ctx)
 	if err != nil && !errdefs.IsNotFound(err) {

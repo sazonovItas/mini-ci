@@ -36,8 +36,7 @@ func (ds dataStore) New(id string) error {
 		dir := ds.Location(id)
 
 		if err := os.MkdirAll(dir, os.FileMode(0o700)); err != nil {
-			// TODO: add normal error from the errdefs
-			return err
+			return fmt.Errorf("%w: container id - %s: %w", ErrMakeContainerDir, id, err)
 		}
 
 		return nil

@@ -7,6 +7,7 @@ import (
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/pkg/cio"
 	"github.com/containerd/errdefs"
+	"github.com/containerd/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 	"github.com/sazonovItas/mini-ci/worker/runtime/network"
@@ -38,11 +39,13 @@ type Network interface {
 }
 
 const (
+	defaultSnapshotter   = "overlayfs"
 	defaultDataStorePath = "/var/lib/minici"
 )
 
 type Runtime struct {
 	client        *containerd.Client
+	snapshotter   string
 	dataStorePath string
 
 	dataStore DataStore
@@ -53,7 +56,43 @@ type Runtime struct {
 
 type RuntimeOpt func(r *Runtime)
 
-func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err error) {
+func WithSnapshotter(snapshotter string) RuntimeOpt {
+	return func(r *Runtime) {
+		r.snapshotter = defaultSnapshotter
+	}
+}
+
+func WithDataStorePath(path string) RuntimeOpt {
+	return func(r *Runtime) {
+		r.dataStorePath = path
+	}
+}
+
+func WithDataStore(store DataStore) RuntimeOpt {
+	return func(r *Runtime) {
+		r.dataStore = store
+	}
+}
+
+func WithIOManager(manager IOManager) RuntimeOpt {
+	return func(r *Runtime) {
+		r.ioManager = manager
+	}
+}
+
+func WithKiller(killer Killer) RuntimeOpt {
+	return func(r *Runtime) {
+		r.killer = killer
+	}
+}
+
+func WithNetwork(network Network) RuntimeOpt {
+	return func(r *Runtime) {
+		r.network = network
+	}
+}
+
+func New(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err error) {
 	r = &Runtime{client: client}
 	for _, opt := range opts {
 		opt(r)
@@ -61,6 +100,10 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 
 	if r.client == nil {
 		return nil, errdefs.ErrInvalidArgument.WithMessage("nil client")
+	}
+
+	if r.snapshotter == "" {
+		r.snapshotter = defaultSnapshotter
 	}
 
 	if r.dataStorePath == "" {
@@ -92,20 +135,25 @@ func NewRuntime(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err 
 	return r, nil
 }
 
-func (r *Runtime) Pull(ctx context.Context, imageRef string) error {
-	_, err := r.client.Pull(ctx, imageRef, containerd.WithPullUnpack)
+func (r *Runtime) Pull(ctx context.Context, imageRef string) (containerd.Image, error) {
+	image, err := r.client.Pull(
+		ctx,
+		imageRef,
+		containerd.WithPullUnpack,
+		containerd.WithPullSnapshotter(r.snapshotter),
+	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return image, nil
 }
 
 func (r *Runtime) ensureImageExists(ctx context.Context, imageRef string) (containerd.Image, error) {
 	storeImage, err := r.client.ImageService().Get(ctx, imageRef)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			image, err := r.client.Pull(ctx, imageRef, containerd.WithPullUnpack)
+			image, err := r.Pull(ctx, imageRef)
 			if err != nil {
 				return nil, err
 			}
@@ -123,7 +171,6 @@ func (r *Runtime) ensureImageExists(ctx context.Context, imageRef string) (conta
 
 func (r *Runtime) Create(ctx context.Context, spec ContainerSpec) (*Container, error) {
 	id := idgen.ID()
-
 	if err := r.dataStore.New(id); err != nil {
 		return nil, err
 	}
@@ -156,6 +203,7 @@ func (r *Runtime) createContainer(
 
 	ctr, err := r.client.NewContainer(
 		ctx, id,
+		containerd.WithSnapshotter(r.snapshotter),
 		containerd.WithNewSnapshot(id, image),
 		containerd.WithImageConfigLabels(image),
 		containerd.WithNewSpec(ociOpts...),
@@ -197,6 +245,12 @@ func (r *Runtime) Containers(ctx context.Context, filters ...string) ([]*Contain
 }
 
 func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
+	defer func() {
+		if retErr := r.cleanup(ctx, id); retErr != nil {
+			log.G(ctx).Warnf("failed to cleanup container: %s", retErr.Error())
+		}
+	}()
+
 	r.ioManager.Delete(id)
 
 	container, err := r.client.LoadContainer(ctx, id)
@@ -214,10 +268,6 @@ func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 			return fmt.Errorf("delete container: %w", err)
 		}
 
-		if err = r.cleanup(ctx, id); err != nil {
-			return err
-		}
-
 		return nil
 	}
 
@@ -232,10 +282,6 @@ func (r *Runtime) Destroy(ctx context.Context, id string) (err error) {
 
 	if err = container.Delete(ctx); err != nil {
 		return fmt.Errorf("delete container: %w", err)
-	}
-
-	if err = r.cleanup(ctx, id); err != nil {
-		return err
 	}
 
 	return nil

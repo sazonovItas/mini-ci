@@ -1,12 +1,19 @@
 package runtime
 
 type TaskSpec struct {
-	Path string
-	Args []string
+	Command []string
+	Args    []string
 }
 
 type ContainerSpec struct {
-	Image string
-	Dir   string
-	Envs  []string
+	Image  string
+	Cwd    string
+	Env    []string
+	Mounts []MountSpec
+}
+
+type MountSpec struct {
+	Src      string
+	Dst      string
+	Readonly bool
 }

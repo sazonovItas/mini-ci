@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -94,8 +93,8 @@ func processLogs(
 
 		for err == nil {
 			s, err = r.ReadString('\n')
-			if log := strings.TrimSuffix(s, "\n"); log != "" {
-				ch <- log
+			if len(s) > 0 {
+				ch <- s
 			}
 
 			if err != nil && !errors.Is(err, io.EOF) {
@@ -155,7 +154,6 @@ func getContainerWait(
 	for {
 		select {
 		case <-ctx.Done():
-			// TODO: add normal error from the errdefs
 			return nil, errors.New("timed out waiting for container task to start")
 		case <-ticker.C:
 			task, err = container.Task(ctx, nil)

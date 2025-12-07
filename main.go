@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -32,7 +34,7 @@ func main() {
 	defer func() {
 		_ = client.Close()
 	}()
-	r, err := runtime.NewRuntime(client)
+	r, err := runtime.New(client)
 	if err != nil {
 		panic(err)
 	}
@@ -41,22 +43,21 @@ func main() {
 
 	containerSpec := runtime.ContainerSpec{
 		Image: "docker.io/library/alpine:3.22",
+		Mounts: []runtime.MountSpec{
+			{
+				Src: "/var/lib",
+				Dst: "/test/test",
+			},
+		},
 	}
 
 	taskSpec := runtime.TaskSpec{
-		Path: "sh",
+		Command: []string{"sh", "-c"},
 		Args: []string{
-			"-c",
 			`
 				set -xeu
 
-				ping -c 2 archlinux.org
-
-				apk update && apk add curl
-
-				curl -L archlinux.org
-
-				ip addr
+				ls -la /test/test
 			`,
 		},
 	}
@@ -75,7 +76,7 @@ func main() {
 		panic(err)
 	}
 
-	task, err := container.Start(ctx, jsonLogger)
+	task, err := container.Start(ctx, jsonLogger, stdoutLogger{})
 	if err != nil {
 		panic(err)
 	}
@@ -95,35 +96,39 @@ func main() {
 		fmt.Printf("proc finished with status %d\n", exitStatus)
 	}
 
-	taskSpec = runtime.TaskSpec{
-		Path: "sh",
-		Args: []string{
-			"-c",
-			`
-				set -xeu
-
-				echo "Hello, second task"
-
-				ip addr
-			`,
-		},
-	}
-
-	if err := container.NewTask(ctx, taskSpec); err != nil {
-		panic(err)
-	}
-
-	task, err = container.Start(ctx, jsonLogger)
-	if err != nil {
-		panic(err)
-	}
-
-	exitStatus, err = task.WaitExitStatus(ctx)
-	if err != nil {
-		fmt.Printf("proc finished error: %s\n", err.Error())
-	} else {
-		fmt.Printf("proc finished with status %d\n", exitStatus)
-	}
-
 	<-ctx.Done()
+}
+
+type stdoutLogger struct{}
+
+func (l stdoutLogger) Process(id string, stdout <-chan string, stderr <-chan string) error {
+	var (
+		isErrClosed = false
+		isOutClosed = false
+	)
+
+	w := bufio.NewWriter(os.Stdout)
+
+	for !isOutClosed || !isErrClosed {
+		select {
+		case log, ok := <-stdout:
+			if !ok {
+				isOutClosed = true
+				break
+			}
+
+			_, _ = w.WriteString(log)
+			_ = w.Flush()
+		case log, ok := <-stderr:
+			if !ok {
+				isErrClosed = true
+				break
+			}
+
+			_, _ = w.WriteString(log)
+			_ = w.Flush()
+		}
+	}
+
+	return nil
 }

@@ -51,7 +51,6 @@ var (
 	nsIPv4Regexpmatch = regexp.MustCompile(`^\s*nameserver\s*((` + ipv4Address + `))\s*$`)
 )
 
-// getLines parses input into lines and strips away comments.
 func getLines(input []byte, commentMarker []byte) [][]byte {
 	lines := bytes.Split(input, []byte("\n"))
 	var output [][]byte
@@ -83,15 +82,4 @@ func getNameservers(resolvConf []byte, kind int) []string {
 		}
 	}
 	return nameservers
-}
-
-func buildResolvConf(dns []string) ([]byte, error) {
-	content := bytes.NewBuffer(nil)
-	for _, dns := range dns {
-		if _, err := content.WriteString("nameserver " + dns + "\n"); err != nil {
-			return nil, err
-		}
-	}
-
-	return content.Bytes(), nil
 }
