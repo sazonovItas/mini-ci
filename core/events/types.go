@@ -9,5 +9,7 @@ const (
 	EventTypeStartScript  EventType = "start-script"
 	EventTypeFinishScript EventType = "finish-script"
 
+	EventTypeLog EventType = "log"
+
 	EventTypeError EventType = "error"
 )

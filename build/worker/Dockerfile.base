@@ -24,6 +24,7 @@ RUN echo "Installing packages..." \
   && ln -s "$(which systemd)" /sbin/init
 
 RUN echo "Enabling/Disabling services..." \
+  && systemctl enable systemd-journald \
   && systemctl enable containerd-fuse-overlayfs.service \
   && systemctl enable containerd.service \
   && systemctl mask run-rpc_pipefs.mount

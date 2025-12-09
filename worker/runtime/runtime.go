@@ -135,7 +135,12 @@ func New(client *containerd.Client, opts ...RuntimeOpt) (r *Runtime, err error) 
 	return r, nil
 }
 
-func (r *Runtime) Pull(ctx context.Context, imageRef string) (containerd.Image, error) {
+func (r *Runtime) Pull(ctx context.Context, imageRef string) error {
+	_, err := r.pull(ctx, imageRef)
+	return err
+}
+
+func (r *Runtime) pull(ctx context.Context, imageRef string) (containerd.Image, error) {
 	image, err := r.client.Pull(
 		ctx,
 		imageRef,
@@ -153,7 +158,7 @@ func (r *Runtime) ensureImageExists(ctx context.Context, imageRef string) (conta
 	storeImage, err := r.client.ImageService().Get(ctx, imageRef)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
-			image, err := r.Pull(ctx, imageRef)
+			image, err := r.pull(ctx, imageRef)
 			if err != nil {
 				return nil, err
 			}

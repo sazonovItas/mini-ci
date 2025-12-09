@@ -37,16 +37,16 @@ func unmarshaler[T Event]() func([]byte) (Event, error) {
 
 type Event interface {
 	Type() EventType
+	Origin() EventOrigin
 }
 
-type OriginID string
-
-func (id OriginID) String() string {
-	return string(id)
+type EventOrigin struct {
+	TaskID    string    `json:"task_id"`
+	OccuredAt time.Time `json:"occured_at"`
 }
 
-type Origin struct {
-	ID OriginID `json:"id,omitempty"`
+func (o EventOrigin) Origin() EventOrigin {
+	return o
 }
 
 type ContainerConfig struct {
@@ -56,18 +56,15 @@ type ContainerConfig struct {
 }
 
 type StartInitContainer struct {
-	Origin Origin          `json:"origin"`
-	Time   time.Time       `json:"time"`
-	Config ContainerConfig `json:"config"`
+	EventOrigin `json:",inline"`
+	Config      ContainerConfig `json:"config"`
 }
 
 func (StartInitContainer) Type() EventType { return EventTypeStartInitContainer }
 
 type FinishInitContainer struct {
-	Origin      Origin    `json:"origin"`
-	Time        time.Time `json:"time"`
-	ContainerID string    `json:"containerId"`
-	Succeeded   bool      `json:"succeeded"`
+	EventOrigin `json:",inline"`
+	ContainerID string `json:"containerId"`
 }
 
 func (FinishInitContainer) Type() EventType { return EventTypeFinishInitContainer }
@@ -79,26 +76,42 @@ type ScriptConfig struct {
 }
 
 type StartScript struct {
-	Origin Origin       `json:"origin"`
-	Time   time.Time    `json:"time"`
-	Config ScriptConfig `json:"config"`
+	EventOrigin `json:",inline"`
+	Config      ScriptConfig `json:"config"`
 }
 
 func (StartScript) Type() EventType { return EventTypeStartScript }
 
 type FinishScript struct {
-	Origin     Origin    `json:"origin"`
-	Time       time.Time `json:"time"`
-	ExitStatus int       `json:"exitStatus"`
-	Succeeded  bool      `json:"succeeded"`
+	EventOrigin `json:",inline"`
+	ExitStatus  int  `json:"exitStatus"`
+	Succeeded   bool `json:"succeeded"`
 }
 
 func (FinishScript) Type() EventType { return EventTypeFinishScript }
 
+type LogMessage struct {
+	Msg  string    `json:"msg"`
+	Time time.Time `json:"time"`
+}
+
+type Log struct {
+	EventOrigin `json:",inline"`
+	Messages    []LogMessage `json:"messages"`
+}
+
+func (Log) Type() EventType { return EventTypeLog }
+
 type Error struct {
-	Origin  Origin    `json:"origin"`
-	Time    time.Time `json:"time"`
-	Message string    `json:"message"`
+	EventOrigin `json:",inline"`
+	Message     string `json:"message"`
 }
 
 func (Error) Type() EventType { return EventTypeError }
+
+func NewErrorEvent(origin EventOrigin, msg string) Error {
+	return Error{
+		EventOrigin: origin,
+		Message:     msg,
+	}
+}

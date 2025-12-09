@@ -8,7 +8,11 @@ import (
 	"strings"
 )
 
-type Params map[string]any
+type StepStatus string
+
+func (status StepStatus) String() string {
+	return string(status)
+}
 
 type Step struct {
 	Config        StepConfig
@@ -45,7 +49,7 @@ func (s *Step) UnmarshalJSON(data []byte) error {
 
 		data, err = json.Marshal(rawStepConfig)
 		if err != nil {
-			return fmt.Errorf("re-marshal rawStepConfig parsing: %w", err)
+			return fmt.Errorf("re-marshal rawStepConfig: %w", err)
 		}
 	}
 
@@ -120,24 +124,34 @@ type StepHandler interface {
 	HandleContainer(*ContainerStep) error
 }
 
-type ScriptStep struct {
-	Name    string   `json:"script"`
-	Command []string `json:"command"`
-	Args    []string `json:"args,omitempty"`
-	Params  Params   `json:"params,omitempty"`
-}
-
-func (s *ScriptStep) Handle(v StepHandler) error {
-	return v.HandleScript(s)
+type ContainerOutputs struct {
+	ContainerID string `json:"containerId,omitempty"`
 }
 
 type ContainerStep struct {
-	Name   string   `json:"container"`
-	Image  []string `json:"image"`
-	Env    []string `json:"env,omitempty"`
-	Params Params   `json:"params,omitempty"`
+	Name    string           `json:"container"`
+	Image   []string         `json:"image"`
+	Env     []string         `json:"env,omitempty"`
+	Outputs ContainerOutputs `json:"outputs"`
 }
 
 func (s *ContainerStep) Handle(v StepHandler) error {
 	return v.HandleContainer(s)
+}
+
+type ScriptOutputs struct {
+	ExitStatus int  `json:"exit_status,omitempty"`
+	Success    bool `json:"success,omitempty"`
+}
+
+type ScriptStep struct {
+	Name        string        `json:"script"`
+	ContainerID string        `json:"containerId"`
+	Command     []string      `json:"command"`
+	Args        []string      `json:"args,omitempty"`
+	Outputs     ScriptOutputs `json:"outputs"`
+}
+
+func (s *ScriptStep) Handle(v StepHandler) error {
+	return v.HandleScript(s)
 }

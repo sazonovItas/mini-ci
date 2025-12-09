@@ -46,7 +46,7 @@ func (t *Task) WaitExitStatus(ctx context.Context) (int, error) {
 
 	_, err := t.task.Delete(ctx)
 	if err != nil && !errdefs.IsNotFound(err) {
-		return 0, fmt.Errorf("delete process: %w", err)
+		return 0, fmt.Errorf("delete task: %w", err)
 	}
 
 	return int(status.ExitCode()), nil

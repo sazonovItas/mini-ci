@@ -22,25 +22,8 @@ func NewExchange() *Exchange {
 
 var (
 	_ events.Publisher  = (*Exchange)(nil)
-	_ events.Forwarder  = (*Exchange)(nil)
 	_ events.Subscriber = (*Exchange)(nil)
 )
-
-func (e *Exchange) Forward(ctx context.Context, event events.Event) (err error) {
-	defer func() {
-		logger := log.G(ctx).WithFields(log.Fields{
-			"event": event.Type(),
-		})
-
-		if err != nil {
-			logger.WithError(err).Error("failed to forward event")
-		} else {
-			logger.Trace("event forwarded")
-		}
-	}()
-
-	return e.broadcaster.Write(event)
-}
 
 func (e *Exchange) Publish(ctx context.Context, event events.Event) (err error) {
 	defer func() {

@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sazonovItas/mini-ci/worker/runtime/idgen"
 	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 )
 
@@ -34,6 +35,10 @@ func NewContainer(
 
 func (c *Container) ID() string {
 	return c.container.ID()
+}
+
+func (c *Container) ShortID() string {
+	return idgen.ShortID(c.container.ID())
 }
 
 func (c *Container) Container() containerd.Container {

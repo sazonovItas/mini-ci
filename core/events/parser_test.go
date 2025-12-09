@@ -31,7 +31,7 @@ func TestMessageParsing(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateContainer event",
+			name: "StartInitContainer event",
 			args: args{
 				Event: StartInitContainer{
 					Origin: Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
@@ -45,7 +45,7 @@ func TestMessageParsing(t *testing.T) {
 			},
 		},
 		{
-			name: "FinishCreateContainer event",
+			name: "FinishInitContainer event",
 			args: args{
 				Event: FinishInitContainer{
 					Origin:      Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
@@ -58,12 +58,12 @@ func TestMessageParsing(t *testing.T) {
 			name: "StartScript event",
 			args: args{
 				Event: StartScript{
-					Origin:      Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:        time.Now().UTC(),
-					ContainerID: "test",
+					Origin: Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
+					Time:   time.Now().UTC(),
 					Config: ScriptConfig{
-						Command: []string{"/usr/bin/ls"},
-						Args:    []string{"-la"},
+						ContainerID: "test",
+						Command:     []string{"/usr/bin/ls"},
+						Args:        []string{"-la"},
 					},
 				},
 			},

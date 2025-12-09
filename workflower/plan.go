@@ -1,8 +1,16 @@
 package workflower
 
+type PlanID string
+
+func (id PlanID) String() string {
+	return string(id)
+}
+
 type Plan struct {
-	Step *StepPlan `json:"step,omitempty"`
-	Run  *RunPlan  `json:"run,omitempty"`
+	ID PlanID `json:"id"`
+
+	Job *JobPlan `json:"job,omitempty"`
+	Run *RunPlan `json:"run,omitempty"`
 
 	Script    *ScriptPlan    `json:"script,omitempty"`
 	Container *ContainerPlan `json:"container,omitempty"`
@@ -15,9 +23,9 @@ func (p *Plan) Each(f func(*Plan)) {
 
 	f(p)
 
-	if p.Step != nil {
-		p.Step.Plan.Each(f)
-		p.Step.Next.Each(f)
+	if p.Job != nil {
+		p.Job.Plan.Each(f)
+		p.Job.Next.Each(f)
 	}
 
 	if p.Run != nil {
@@ -26,7 +34,7 @@ func (p *Plan) Each(f func(*Plan)) {
 	}
 }
 
-type StepPlan struct {
+type JobPlan struct {
 	Plan *Plan `json:"plan"`
 	Next *Plan `json:"next"`
 }
@@ -37,9 +45,9 @@ type RunPlan struct {
 }
 
 type ContainerPlan struct {
-	Image string `json:"image"`
-	Env   string `json:"env,omitempty"`
-	Cwd   string `json:"cwd,omitempty"`
+	Image string   `json:"image"`
+	Cwd   string   `json:"cwd,omitempty"`
+	Env   []string `json:"env,omitempty"`
 }
 
 type ScriptPlan struct {

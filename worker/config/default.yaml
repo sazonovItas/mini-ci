@@ -1,4 +1,9 @@
+socket_io:
+  address: "http://localhost:8080"
+  endpoint: "/api/worker/events"
+  event_namespace: "event_message"
+
 runtime:
-  address: /var/run/containerd.sock
-  snapshotter: overlayfs
-  data_store_path: /var/lib/minici
+  address: "/var/run/containerd.sock"
+  snapshotter: "overlayfs"
+  data_store_path: "/var/lib/minici"
