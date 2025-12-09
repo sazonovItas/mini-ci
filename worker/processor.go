@@ -11,7 +11,7 @@ import (
 )
 
 type EventLogger interface {
-	Log(message string)
+	Log(msg string)
 	Process(id string, stdout <-chan string, stderr <-chan string) error
 }
 

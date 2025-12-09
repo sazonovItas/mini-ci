@@ -18,12 +18,8 @@ func NewEventLogger(sender Sender, origin events.EventOrigin) *eventLogger {
 	}
 }
 
-func (l *eventLogger) Log(message string) {
-	event := events.Log{
-		EventOrigin: l.origin,
-		Messages:    []events.LogMessage{{Msg: message, Time: time.Now().UTC()}},
-	}
-	l.sender.Send(event)
+func (l *eventLogger) Log(msg string) {
+	l.sendMessages([]events.LogMessage{l.newLogMessage(msg)})
 }
 
 func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan string) error {
@@ -48,7 +44,7 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 				break
 			}
 
-			messages = append(messages, events.LogMessage{Msg: log, Time: time.Now().UTC()})
+			messages = append(messages, l.newLogMessage(log))
 
 		case log, ok := <-stderr:
 			if !ok {
@@ -56,7 +52,7 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 				break
 			}
 
-			messages = append(messages, events.LogMessage{Msg: log, Time: time.Now().UTC()})
+			messages = append(messages, l.newLogMessage(log))
 
 		case <-ticker.C:
 			l.sendMessages(messages)
@@ -73,4 +69,8 @@ func (l *eventLogger) sendMessages(messages []events.LogMessage) {
 		Messages:    messages,
 	}
 	l.sender.Send(event)
+}
+
+func (l *eventLogger) newLogMessage(msg string) events.LogMessage {
+	return events.LogMessage{Msg: msg, Time: time.Now().UTC()}
 }
