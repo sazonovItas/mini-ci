@@ -7,16 +7,15 @@ package psql
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 const createWorkflow = `-- name: CreateWorkflow :exec
-INSERT INTO workflows (id, name, config) VALUES ($1, $2, $3)
+INSERT INTO workflows (id, name, config) 
+  VALUES ($1, $2, $3)
 `
 
 type CreateWorkflowParams struct {
-	ID     uuid.UUID
+	ID     string
 	Name   string
 	Config []byte
 }
@@ -28,10 +27,10 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 
 const workflow = `-- name: Workflow :one
 SELECT id, name, config FROM workflows
-WHERE id = $1 LIMIT 1
+  WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) Workflow(ctx context.Context, id uuid.UUID) (Workflow, error) {
+func (q *Queries) Workflow(ctx context.Context, id string) (Workflow, error) {
 	row := q.db.QueryRow(ctx, workflow, id)
 	var i Workflow
 	err := row.Scan(&i.ID, &i.Name, &i.Config)
@@ -40,7 +39,7 @@ func (q *Queries) Workflow(ctx context.Context, id uuid.UUID) (Workflow, error) 
 
 const workflowByName = `-- name: WorkflowByName :one
 SELECT id, name, config FROM workflows
-WHERE name = $1 LIMIT 1
+  WHERE name = $1 LIMIT 1
 `
 
 func (q *Queries) WorkflowByName(ctx context.Context, name string) (Workflow, error) {

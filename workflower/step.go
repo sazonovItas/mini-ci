@@ -106,22 +106,31 @@ type StepDetector struct {
 
 var StepDetectors = []StepDetector{
 	{
-		Key: "script",
-		New: func() StepConfig { return &ScriptStep{} },
+		Key: "job",
+		New: func() StepConfig { return &JobStep{} },
+	},
+	{
+		Key: "run",
+		New: func() StepConfig { return &RunStep{} },
 	},
 	{
 		Key: "container",
 		New: func() StepConfig { return &ContainerStep{} },
 	},
+	{
+		Key: "script",
+		New: func() StepConfig { return &ScriptStep{} },
+	},
 }
 
-type StepConfig interface {
-	Handle(StepHandler) error
+type StepConfig any
+
+type JobStep struct {
+	Name string `json:"job"`
 }
 
-type StepHandler interface {
-	HandleScript(*ScriptStep) error
-	HandleContainer(*ContainerStep) error
+type RunStep struct {
+	Name string `json:"run"`
 }
 
 type ContainerOutputs struct {
@@ -135,10 +144,6 @@ type ContainerStep struct {
 	Outputs ContainerOutputs `json:"outputs"`
 }
 
-func (s *ContainerStep) Handle(v StepHandler) error {
-	return v.HandleContainer(s)
-}
-
 type ScriptOutputs struct {
 	ExitStatus int  `json:"exit_status,omitempty"`
 	Success    bool `json:"success,omitempty"`
@@ -150,8 +155,4 @@ type ScriptStep struct {
 	Command     []string      `json:"command"`
 	Args        []string      `json:"args,omitempty"`
 	Outputs     ScriptOutputs `json:"outputs"`
-}
-
-func (s *ScriptStep) Handle(v StepHandler) error {
-	return v.HandleScript(s)
 }

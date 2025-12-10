@@ -9,3 +9,9 @@ func WithEventType(types ...EventType) FilterFunc {
 		return slices.Contains(types, e.Type())
 	}
 }
+
+func WithEventOriginTaskID(id string) FilterFunc {
+	return func(e Event) bool {
+		return e.Origin().TaskID == id
+	}
+}

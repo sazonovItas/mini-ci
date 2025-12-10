@@ -7,16 +7,14 @@ package psql
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 const build = `-- name: Build :one
 SELECT id, workflow_id, status, plan, started_at, finished_at FROM builds
-WHERE id = $1 LIMIT 1
+  WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) Build(ctx context.Context, id uuid.UUID) (Build, error) {
+func (q *Queries) Build(ctx context.Context, id string) (Build, error) {
 	row := q.db.QueryRow(ctx, build, id)
 	var i Build
 	err := row.Scan(
@@ -32,10 +30,10 @@ func (q *Queries) Build(ctx context.Context, id uuid.UUID) (Build, error) {
 
 const buildsByWorkflow = `-- name: BuildsByWorkflow :many
 SELECT id, workflow_id, status, plan, started_at, finished_at FROM builds
-WHERE workflow_id = $1
+  WHERE workflow_id = $1
 `
 
-func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]Build, error) {
+func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Build, error) {
 	rows, err := q.db.Query(ctx, buildsByWorkflow, workflowID)
 	if err != nil {
 		return nil, err
@@ -67,8 +65,8 @@ INSERT INTO builds (id, workflow_id, status, plan) VALUES ($1, $2, $3, $4)
 `
 
 type CreateBuildParams struct {
-	ID         uuid.UUID
-	WorkflowID uuid.UUID
+	ID         string
+	WorkflowID string
 	Status     string
 	Plan       []byte
 }
@@ -90,7 +88,7 @@ UPDATE builds
 `
 
 type UpdateBuildStatusParams struct {
-	ID     uuid.UUID
+	ID     string
 	Status string
 }
 

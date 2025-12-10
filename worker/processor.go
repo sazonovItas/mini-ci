@@ -19,30 +19,29 @@ type EventLoggerFactory interface {
 	New(origin events.EventOrigin) EventLogger
 }
 
-type Sender interface {
-	Send(event events.Event)
+type Publisher interface {
+	Publish(event events.Event) error
 }
 
 type Runtime interface {
 	Pull(ctx context.Context, imageRef string) error
 	Container(ctx context.Context, id string) (*runtimespec.Container, error)
 	Create(ctx context.Context, spec runtimespec.ContainerConfig) (*runtimespec.Container, error)
-	Destroy(ctx context.Context, id string) error
 }
 
 type EventProcessor struct {
 	wg sync.WaitGroup
 
-	sender        Sender
 	runtime       Runtime
+	Publisher     Publisher
 	loggerFactory EventLoggerFactory
 }
 
-func NewEventProcessor(sender Sender, runtime Runtime) *EventProcessor {
+func NewEventProcessor(runtime Runtime, publisher Publisher) *EventProcessor {
 	return &EventProcessor{
-		sender:        sender,
 		runtime:       runtime,
-		loggerFactory: NewEventLoggerFactory(sender),
+		Publisher:     publisher,
+		loggerFactory: NewEventLoggerFactory(publisher),
 	}
 }
 
@@ -58,23 +57,32 @@ func (p *EventProcessor) Process(ctx context.Context, evch <-chan events.Event) 
 
 			p.wg.Go(func() {
 				if err := p.process(ctx, event); err != nil {
-					p.sender.Send(events.NewErrorEvent(event.Origin(), err.Error()))
+					_ = p.Publisher.Publish(events.NewErrorEvent(event.Origin(), err.Error()))
 				}
 			})
 		}
 	}
 }
 
-func (p *EventProcessor) Wait() {
-	p.wg.Wait()
+func (p *EventProcessor) Wait() chan struct{} {
+	waitch := make(chan struct{})
+
+	go func() {
+		defer close(waitch)
+		p.wg.Wait()
+	}()
+
+	return waitch
 }
 
 func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	switch event := ev.(type) {
-	case events.StartInitContainer:
-		return p.startInitContainer(ctx, event)
-	case events.StartScript:
-		return p.startScript(ctx, event)
+	case events.ContainerInitStart:
+		return p.containerInitStart(ctx, event)
+
+	case events.ScriptStart:
+		return p.scriptStart(ctx, event)
+
 	default:
 		log.G(ctx).Errorf("cannot process event: %s", event.Type())
 	}
@@ -82,7 +90,7 @@ func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	return nil
 }
 
-func (p *EventProcessor) startInitContainer(ctx context.Context, event events.StartInitContainer) error {
+func (p *EventProcessor) containerInitStart(ctx context.Context, event events.ContainerInitStart) error {
 	evLogger := p.loggerFactory.New(event.Origin())
 
 	if err := p.runtime.Pull(ctx, event.Config.Image); err != nil {
@@ -106,16 +114,16 @@ func (p *EventProcessor) startInitContainer(ctx context.Context, event events.St
 
 	evLogger.Log(fmt.Sprintf("created container %s", container.ShortID()))
 
-	finishInitContainer := events.FinishInitContainer{
+	finishInitContainer := events.ContainerInitFinish{
 		EventOrigin: event.Origin(),
 		ContainerID: container.ID(),
 	}
-	p.sender.Send(finishInitContainer)
+	_ = p.Publisher.Publish(finishInitContainer)
 
 	return nil
 }
 
-func (p *EventProcessor) startScript(ctx context.Context, event events.StartScript) error {
+func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptStart) error {
 	evLogger := p.loggerFactory.New(event.Origin())
 
 	container, err := p.runtime.Container(ctx, event.Config.ContainerID)
@@ -148,12 +156,12 @@ func (p *EventProcessor) startScript(ctx context.Context, event events.StartScri
 		return err
 	}
 
-	finishScript := events.FinishScript{
+	finishScript := events.ScriptFinish{
 		EventOrigin: event.Origin(),
 		ExitStatus:  exitStatus,
 		Succeeded:   exitStatus != 0,
 	}
-	p.sender.Send(finishScript)
+	_ = p.Publisher.Publish(finishScript)
 
 	return nil
 }

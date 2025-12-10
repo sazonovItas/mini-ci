@@ -1,7 +1,9 @@
+name: default
+
 socket_io:
   address: "http://localhost:8080"
   endpoint: "/api/worker/events"
-  event_namespace: "event_message"
+  event_namespace: "events"
 
 runtime:
   address: "/var/run/containerd.sock"

@@ -8,6 +8,7 @@ import (
 var DefaultConfig []byte
 
 type Config struct {
+	Name     string         `yaml:"name" mapstructure:"name"`
 	Runtime  RuntimeConfig  `yaml:"runtime" mapstructure:"runtime"`
 	SocketIO SocketIOConfig `yaml:"socket_io" mapstructure:"socket_io"`
 }

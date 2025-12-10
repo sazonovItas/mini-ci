@@ -6,11 +6,13 @@ import (
 )
 
 func init() {
-	RegisterEvent[StartInitContainer]()
-	RegisterEvent[FinishInitContainer]()
-	RegisterEvent[StartScript]()
-	RegisterEvent[FinishScript]()
+	RegisterEvent[Log]()
 	RegisterEvent[Error]()
+	RegisterEvent[WorkerRegister]()
+	RegisterEvent[ContainerInitStart]()
+	RegisterEvent[ContainerInitFinish]()
+	RegisterEvent[ScriptStart]()
+	RegisterEvent[ScriptFinish]()
 }
 
 func RegisterEvent[T Event]() {
@@ -41,13 +43,25 @@ type Event interface {
 }
 
 type EventOrigin struct {
-	TaskID    string    `json:"task_id"`
-	OccuredAt time.Time `json:"occured_at"`
+	TaskID    string    `json:"taskId"`
+	OccuredAt time.Time `json:"occuredAt"`
+}
+
+func NewEventOrigin(taskID string) EventOrigin {
+	return EventOrigin{TaskID: taskID, OccuredAt: time.Now().UTC()}
 }
 
 func (o EventOrigin) Origin() EventOrigin {
 	return o
 }
+
+type WorkerRegister struct {
+	Name string `json:"name"`
+}
+
+func (WorkerRegister) Origin() EventOrigin { return EventOrigin{} }
+
+func (WorkerRegister) Type() EventType { return EventTypeWorkerRegister }
 
 type ContainerConfig struct {
 	Image string   `json:"image"`
@@ -55,19 +69,19 @@ type ContainerConfig struct {
 	Env   []string `json:"env,omitempty"`
 }
 
-type StartInitContainer struct {
+type ContainerInitStart struct {
 	EventOrigin `json:",inline"`
 	Config      ContainerConfig `json:"config"`
 }
 
-func (StartInitContainer) Type() EventType { return EventTypeStartInitContainer }
+func (ContainerInitStart) Type() EventType { return EventTypeContainerInitStart }
 
-type FinishInitContainer struct {
+type ContainerInitFinish struct {
 	EventOrigin `json:",inline"`
 	ContainerID string `json:"containerId"`
 }
 
-func (FinishInitContainer) Type() EventType { return EventTypeFinishInitContainer }
+func (ContainerInitFinish) Type() EventType { return EventTypeContainerInitFinish }
 
 type ScriptConfig struct {
 	ContainerID string   `json:"containerId"`
@@ -75,20 +89,20 @@ type ScriptConfig struct {
 	Args        []string `json:"args,omitempty"`
 }
 
-type StartScript struct {
+type ScriptStart struct {
 	EventOrigin `json:",inline"`
 	Config      ScriptConfig `json:"config"`
 }
 
-func (StartScript) Type() EventType { return EventTypeStartScript }
+func (ScriptStart) Type() EventType { return EventTypeScriptStart }
 
-type FinishScript struct {
+type ScriptFinish struct {
 	EventOrigin `json:",inline"`
 	ExitStatus  int  `json:"exitStatus"`
 	Succeeded   bool `json:"succeeded"`
 }
 
-func (FinishScript) Type() EventType { return EventTypeFinishScript }
+func (ScriptFinish) Type() EventType { return EventTypeScriptFinish }
 
 type LogMessage struct {
 	Msg  string    `json:"msg"`
@@ -110,8 +124,5 @@ type Error struct {
 func (Error) Type() EventType { return EventTypeError }
 
 func NewErrorEvent(origin EventOrigin, msg string) Error {
-	return Error{
-		EventOrigin: origin,
-		Message:     msg,
-	}
+	return Error{EventOrigin: origin, Message: msg}
 }

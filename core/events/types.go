@@ -3,11 +3,13 @@ package events
 type EventType string
 
 const (
-	EventTypeStartInitContainer  EventType = "start-init-container"
-	EventTypeFinishInitContainer EventType = "finish-init-container"
+	EventTypeContainerInitStart  EventType = "container:init:start"
+	EventTypeContainerInitFinish EventType = "container:init:finish"
 
-	EventTypeStartScript  EventType = "start-script"
-	EventTypeFinishScript EventType = "finish-script"
+	EventTypeScriptStart  EventType = "script:start"
+	EventTypeScriptFinish EventType = "script:finish"
+
+	EventTypeWorkerRegister EventType = "worker:register"
 
 	EventTypeLog EventType = "log"
 

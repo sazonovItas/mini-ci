@@ -7,17 +7,16 @@ package psql
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 const createTask = `-- name: CreateTask :exec
-INSERT INTO tasks (id, build_id, status, step) VALUES ($1, $2, $3, $4)
+INSERT INTO tasks (id, build_id, status, step) 
+  VALUES ($1, $2, $3, $4)
 `
 
 type CreateTaskParams struct {
-	ID      uuid.UUID
-	BuildID uuid.UUID
+	ID      string
+	BuildID string
 	Status  string
 	Step    []byte
 }
@@ -34,10 +33,10 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 
 const task = `-- name: Task :one
 SELECT id, build_id, status, step FROM tasks
-WHERE id = $1 LIMIT 1
+  WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) Task(ctx context.Context, id uuid.UUID) (Task, error) {
+func (q *Queries) Task(ctx context.Context, id string) (Task, error) {
 	row := q.db.QueryRow(ctx, task, id)
 	var i Task
 	err := row.Scan(
@@ -80,10 +79,10 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 
 const tasksByBuild = `-- name: TasksByBuild :many
 SELECT id, build_id, status, step FROM tasks
-WHERE build_id = $1
+  WHERE build_id = $1
 `
 
-func (q *Queries) TasksByBuild(ctx context.Context, buildID uuid.UUID) ([]Task, error) {
+func (q *Queries) TasksByBuild(ctx context.Context, buildID string) ([]Task, error) {
 	rows, err := q.db.Query(ctx, tasksByBuild, buildID)
 	if err != nil {
 		return nil, err
@@ -110,11 +109,11 @@ func (q *Queries) TasksByBuild(ctx context.Context, buildID uuid.UUID) ([]Task, 
 
 const tasksByBuildAndStatus = `-- name: TasksByBuildAndStatus :many
 SELECT id, build_id, status, step FROM tasks
-WHERE build_id = $1 AND status = $2
+  WHERE build_id = $1 AND status = $2
 `
 
 type TasksByBuildAndStatusParams struct {
-	BuildID uuid.UUID
+	BuildID string
 	Status  string
 }
 
@@ -145,7 +144,7 @@ func (q *Queries) TasksByBuildAndStatus(ctx context.Context, arg TasksByBuildAnd
 
 const tasksByStatus = `-- name: TasksByStatus :many
 SELECT id, build_id, status, step FROM tasks
-WHERE status = $1
+  WHERE status = $1
 `
 
 func (q *Queries) TasksByStatus(ctx context.Context, status string) ([]Task, error) {

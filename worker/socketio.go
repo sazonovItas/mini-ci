@@ -21,6 +21,7 @@ const (
 )
 
 type SocketIORunner struct {
+	name           string
 	endpoint       string
 	eventNamespace string
 
@@ -33,18 +34,19 @@ type SocketIORunner struct {
 	cancel context.CancelFunc
 }
 
-func NewSocketIORunner(address string, endpoint string, eventNamespace string) *SocketIORunner {
+func NewSocketIORunner(name, address, endpoint, eventNamespace string) *SocketIORunner {
 	opts := socket.DefaultOptions()
 	opts.SetTimeout(60 * time.Second)
 	opts.SetUpgrade(true)
 	opts.SetAutoConnect(true)
 	opts.SetReconnection(true)
-	opts.SetReconnectionAttempts(5)
-	opts.SetTransports(types.NewSet(transports.WebSocket))
+	opts.SetReconnectionAttempts(10)
+	opts.SetTransports(types.NewSet(transports.WebSocket, transports.Polling))
 
 	manager := socket.NewManager(address, opts)
 
 	return &SocketIORunner{
+		name:           name,
 		endpoint:       endpoint,
 		eventNamespace: eventNamespace,
 		manager:        manager,
@@ -58,27 +60,8 @@ func (r *SocketIORunner) Start(ctx context.Context) error {
 
 	socket := r.manager.Socket(r.endpoint, nil)
 
-	err := socket.On(types.EventName(r.eventNamespace), func(msgs ...any) {
-		if len(msgs) == 0 {
-			return
-		}
-
-		jsonMessage, err := json.Marshal(msgs[0])
-		if err != nil {
-			log.G(ctx).WithError(err).Error("failed to marshal recieved message")
-			return
-		}
-
-		var message events.Message
-		if err := json.Unmarshal(jsonMessage, &message); err != nil {
-			log.G(ctx).WithError(err).Error("failed to unmarshal recieved message into event")
-			return
-		}
-
-		r.recvq.Publish(message.Event)
-	})
-	if err != nil {
-		return fmt.Errorf("failed register listener on %s", r.eventNamespace)
+	if err := r.registerEvents(socket); err != nil {
+		return err
 	}
 
 	go r.startSender(r.ctx, socket)
@@ -95,15 +78,52 @@ func (r *SocketIORunner) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (r *SocketIORunner) Send(event events.Event) {
+func (r *SocketIORunner) Publish(event events.Event) error {
 	r.sendq.Publish(event)
+	return nil
 }
 
 func (r *SocketIORunner) Events() (<-chan events.Event, io.Closer) {
 	return r.recvq.Subscribe()
 }
 
+func (r *SocketIORunner) registerEvents(socket *socket.Socket) (err error) {
+	err = socket.On(types.EventName(r.eventNamespace), func(msgs ...any) {
+		if len(msgs) == 0 {
+			return
+		}
+
+		jsonMessage, err := json.Marshal(msgs[0])
+		if err != nil {
+			log.G(r.ctx).WithError(err).Error("failed to marshal recieved message")
+			return
+		}
+
+		var message events.Message
+		if err := json.Unmarshal(jsonMessage, &message); err != nil {
+			log.G(r.ctx).WithError(err).Error("failed to unmarshal recieved message into event")
+			return
+		}
+
+		r.recvq.Publish(message.Event)
+	})
+	if err != nil {
+		return fmt.Errorf("failed register event listener on %s: %w", r.eventNamespace, err)
+	}
+
+	err = socket.On("connect", func(...any) {
+		_ = r.Publish(events.WorkerRegister{Name: r.name})
+	})
+	if err != nil {
+		return fmt.Errorf("failed register event listener on connect: %w", err)
+	}
+
+	return nil
+}
+
 func (r *SocketIORunner) startSender(ctx context.Context, socket *socket.Socket) {
+	const requeueEventTimeout = 1 * time.Second
+
 	defer socket.Disconnect()
 
 	evch, closer := r.sendq.Subscribe()
@@ -119,18 +139,20 @@ func (r *SocketIORunner) startSender(ctx context.Context, socket *socket.Socket)
 			msg := events.Message{Event: event}
 			if err := socket.Emit(r.eventNamespace, msg); err != nil {
 				log.G(ctx).WithError(err).Errorf("failed to send event %s", event.Type())
-				go r.requeueSendEvent(ctx, event)
+				go r.requeueEventAfter(ctx, event, requeueEventTimeout)
 			}
 		}
 	}
 }
 
-func (r *SocketIORunner) requeueSendEvent(ctx context.Context, event events.Event) {
-	const requeueTimeout = 1 * time.Second
-
+func (r *SocketIORunner) requeueEventAfter(
+	ctx context.Context,
+	event events.Event,
+	timeout time.Duration,
+) {
 	select {
 	case <-ctx.Done():
-	case <-time.After(requeueTimeout):
+	case <-time.After(timeout):
 		r.sendq.Publish(event)
 	}
 }

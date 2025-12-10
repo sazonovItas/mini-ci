@@ -27,12 +27,13 @@ func New(cfg config.Config) (*Worker, error) {
 	}
 
 	sockerIORunner := NewSocketIORunner(
+		cfg.Name,
 		cfg.SocketIO.Address,
 		cfg.SocketIO.Endpoint,
 		cfg.SocketIO.EventNamespace,
 	)
 
-	eventProcessor := NewEventProcessor(sockerIORunner, ctrRuntime)
+	eventProcessor := NewEventProcessor(ctrRuntime, sockerIORunner)
 
 	worker := &Worker{
 		runtime:        ctrRuntime,

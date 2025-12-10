@@ -9,11 +9,6 @@ sql:
         out: "gen/psql"
         sql_package: "pgx/v5"
         overrides:
-          - db_type: "uuid"
-            nullable: false
-            go_type:
-              import: "github.com/google/uuid"
-              type: "UUID"
           - db_type: "pg_catalog.timestamp"
             nullable: false
             go_type:

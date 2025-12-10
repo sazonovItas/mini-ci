@@ -6,13 +6,11 @@ package psql
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type Build struct {
-	ID         uuid.UUID
-	WorkflowID uuid.UUID
+	ID         string
+	WorkflowID string
 	Status     string
 	Plan       []byte
 	StartedAt  *time.Time
@@ -20,21 +18,27 @@ type Build struct {
 }
 
 type Task struct {
-	ID      uuid.UUID
-	BuildID uuid.UUID
+	ID      string
+	BuildID string
 	Status  string
 	Step    []byte
 }
 
 type TaskEvent struct {
-	TaskID    uuid.UUID
+	TaskID    string
 	EventType string
 	OccuredAt time.Time
 	Payload   []byte
 }
 
+type TaskLog struct {
+	TaskID  string
+	Message string
+	Time    time.Time
+}
+
 type Workflow struct {
-	ID     uuid.UUID
+	ID     string
 	Name   string
 	Config []byte
 }

@@ -7,7 +7,9 @@ import (
 	"time"
 )
 
-type unknownEvent struct{}
+type unknownEvent struct {
+	EventOrigin `json:",inline"`
+}
 
 func (unknownEvent) Type() EventType { return "unknown-event" }
 
@@ -24,18 +26,25 @@ func TestMessageParsing(t *testing.T) {
 			name: "Error event",
 			args: args{
 				Event: Error{
-					Origin:  Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:    time.Now().UTC(),
-					Message: "test errror event",
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
+					Message:     "test errror event",
 				},
 			},
 		},
 		{
-			name: "StartInitContainer event",
+			name: "Log event",
 			args: args{
-				Event: StartInitContainer{
-					Origin: Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:   time.Now().UTC(),
+				Event: Log{
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
+					Messages:    []LogMessage{{Msg: "log", Time: time.Now().UTC()}},
+				},
+			},
+		},
+		{
+			name: "ContainerInitStart event",
+			args: args{
+				Event: ContainerInitStart{
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					Config: ContainerConfig{
 						Image: "test",
 						Cwd:   "/test",
@@ -45,21 +54,27 @@ func TestMessageParsing(t *testing.T) {
 			},
 		},
 		{
-			name: "FinishInitContainer event",
+			name: "WorkerRegister event",
 			args: args{
-				Event: FinishInitContainer{
-					Origin:      Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:        time.Now().UTC(),
+				Event: WorkerRegister{
+					Name: "test-worker",
+				},
+			},
+		},
+		{
+			name: "ContainerInitFinish event",
+			args: args{
+				Event: ContainerInitFinish{
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					ContainerID: "test",
 				},
 			},
 		},
 		{
-			name: "StartScript event",
+			name: "ScriptStart event",
 			args: args{
-				Event: StartScript{
-					Origin: Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:   time.Now().UTC(),
+				Event: ScriptStart{
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					Config: ScriptConfig{
 						ContainerID: "test",
 						Command:     []string{"/usr/bin/ls"},
@@ -71,11 +86,10 @@ func TestMessageParsing(t *testing.T) {
 		{
 			name: "FinishScript event",
 			args: args{
-				Event: FinishScript{
-					Origin:     Origin{ID: "86dd0fd2-ce19-4452-bf6f-c1102475eb18"},
-					Time:       time.Now().UTC(),
-					ExitStatus: 0,
-					Succeeded:  true,
+				Event: ScriptFinish{
+					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
+					ExitStatus:  0,
+					Succeeded:   true,
 				},
 			},
 		},

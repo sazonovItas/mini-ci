@@ -6,15 +6,29 @@ import (
 	"github.com/sazonovItas/mini-ci/core/events"
 )
 
-type eventLogger struct {
-	sender Sender
-	origin events.EventOrigin
+type eventLoggerFactory struct {
+	publisher Publisher
 }
 
-func NewEventLogger(sender Sender, origin events.EventOrigin) *eventLogger {
+func NewEventLoggerFactory(publisher Publisher) *eventLoggerFactory {
+	return &eventLoggerFactory{
+		publisher: publisher,
+	}
+}
+
+func (f *eventLoggerFactory) New(origin events.EventOrigin) EventLogger {
+	return NewEventLogger(f.publisher, origin)
+}
+
+type eventLogger struct {
+	publisher Publisher
+	origin    events.EventOrigin
+}
+
+func NewEventLogger(sender Publisher, origin events.EventOrigin) *eventLogger {
 	return &eventLogger{
-		sender: sender,
-		origin: origin,
+		publisher: sender,
+		origin:    origin,
 	}
 }
 
@@ -24,10 +38,10 @@ func (l *eventLogger) Log(msg string) {
 
 func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan string) error {
 	const (
-		batchSendTimeout = 1 * time.Second
+		messagesSendTimeout = 1 * time.Second
 	)
 
-	ticker := time.NewTicker(batchSendTimeout)
+	ticker := time.NewTicker(messagesSendTimeout)
 	defer ticker.Stop()
 
 	var (
@@ -35,6 +49,10 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 		isErrClosed = false
 		isOutClosed = false
 	)
+
+	defer func() {
+		l.sendMessages(messages)
+	}()
 
 	for !isOutClosed || !isErrClosed {
 		select {
@@ -64,11 +82,11 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 }
 
 func (l *eventLogger) sendMessages(messages []events.LogMessage) {
-	event := events.Log{
-		EventOrigin: l.origin,
-		Messages:    messages,
+	if len(messages) == 0 {
+		return
 	}
-	l.sender.Send(event)
+
+	_ = l.publisher.Publish(events.Log{EventOrigin: l.origin, Messages: messages})
 }
 
 func (l *eventLogger) newLogMessage(msg string) events.LogMessage {
