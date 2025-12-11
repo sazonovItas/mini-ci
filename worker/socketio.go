@@ -78,7 +78,7 @@ func (r *SocketIORunner) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (r *SocketIORunner) Publish(event events.Event) error {
+func (r *SocketIORunner) Publish(_ context.Context, event events.Event) error {
 	r.sendq.Publish(event)
 	return nil
 }
@@ -109,13 +109,6 @@ func (r *SocketIORunner) registerEvents(socket *socket.Socket) (err error) {
 	})
 	if err != nil {
 		return fmt.Errorf("failed register event listener on %s: %w", r.eventNamespace, err)
-	}
-
-	err = socket.On("connect", func(...any) {
-		_ = r.Publish(events.WorkerRegister{Name: r.name})
-	})
-	if err != nil {
-		return fmt.Errorf("failed register event listener on connect: %w", err)
 	}
 
 	return nil

@@ -2,6 +2,11 @@
 SELECT * FROM tasks
   WHERE id = $1 LIMIT 1;
 
+-- name: LockTask :one
+SELECT * FROM tasks
+  WHERE id = $1 LIMIT 1
+  FOR UPDATE;
+
 -- name: Tasks :many
 SELECT * FROM tasks;
 
@@ -9,14 +14,25 @@ SELECT * FROM tasks;
 SELECT * FROM tasks
   WHERE status = $1;
 
--- name: TasksByBuild :many
+-- name: TasksByJob :many
 SELECT * FROM tasks
-  WHERE build_id = $1;
+  WHERE job_id = $1;
 
--- name: TasksByBuildAndStatus :many
+-- name: TasksByJobAndStatus :many
 SELECT * FROM tasks
-  WHERE build_id = $1 AND status = $2;
+  WHERE job_id = $1 AND status = $2;
 
 -- name: CreateTask :exec
-INSERT INTO tasks (id, build_id, status, step) 
-  VALUES ($1, $2, $3, $4);
+INSERT INTO tasks (id, job_id, name, status, config) 
+  VALUES ($1, $2, $3, $4, $5);
+
+-- name: UpdateTask :exec
+UPDATE tasks
+  SET status = $2,
+    config = $3
+  WHERE id = $1;
+
+-- name: UpdateTaskStatus :exec
+UPDATE tasks
+  SET status = $2
+  WHERE id = $1;

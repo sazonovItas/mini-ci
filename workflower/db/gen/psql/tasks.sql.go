@@ -10,29 +10,50 @@ import (
 )
 
 const createTask = `-- name: CreateTask :exec
-INSERT INTO tasks (id, build_id, status, step) 
-  VALUES ($1, $2, $3, $4)
+INSERT INTO tasks (id, job_id, name, status, config) 
+  VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateTaskParams struct {
-	ID      string
-	BuildID string
-	Status  string
-	Step    []byte
+	ID     string
+	JobID  string
+	Name   string
+	Status string
+	Config []byte
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
 	_, err := q.db.Exec(ctx, createTask,
 		arg.ID,
-		arg.BuildID,
+		arg.JobID,
+		arg.Name,
 		arg.Status,
-		arg.Step,
+		arg.Config,
 	)
 	return err
 }
 
+const lockTask = `-- name: LockTask :one
+SELECT id, job_id, name, status, config FROM tasks
+  WHERE id = $1 LIMIT 1
+  FOR UPDATE
+`
+
+func (q *Queries) LockTask(ctx context.Context, id string) (Task, error) {
+	row := q.db.QueryRow(ctx, lockTask, id)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+	)
+	return i, err
+}
+
 const task = `-- name: Task :one
-SELECT id, build_id, status, step FROM tasks
+SELECT id, job_id, name, status, config FROM tasks
   WHERE id = $1 LIMIT 1
 `
 
@@ -41,15 +62,16 @@ func (q *Queries) Task(ctx context.Context, id string) (Task, error) {
 	var i Task
 	err := row.Scan(
 		&i.ID,
-		&i.BuildID,
+		&i.JobID,
+		&i.Name,
 		&i.Status,
-		&i.Step,
+		&i.Config,
 	)
 	return i, err
 }
 
 const tasks = `-- name: Tasks :many
-SELECT id, build_id, status, step FROM tasks
+SELECT id, job_id, name, status, config FROM tasks
 `
 
 func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
@@ -63,9 +85,10 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 		var i Task
 		if err := rows.Scan(
 			&i.ID,
-			&i.BuildID,
+			&i.JobID,
+			&i.Name,
 			&i.Status,
-			&i.Step,
+			&i.Config,
 		); err != nil {
 			return nil, err
 		}
@@ -77,13 +100,13 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 	return items, nil
 }
 
-const tasksByBuild = `-- name: TasksByBuild :many
-SELECT id, build_id, status, step FROM tasks
-  WHERE build_id = $1
+const tasksByJob = `-- name: TasksByJob :many
+SELECT id, job_id, name, status, config FROM tasks
+  WHERE job_id = $1
 `
 
-func (q *Queries) TasksByBuild(ctx context.Context, buildID string) ([]Task, error) {
-	rows, err := q.db.Query(ctx, tasksByBuild, buildID)
+func (q *Queries) TasksByJob(ctx context.Context, jobID string) ([]Task, error) {
+	rows, err := q.db.Query(ctx, tasksByJob, jobID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +116,10 @@ func (q *Queries) TasksByBuild(ctx context.Context, buildID string) ([]Task, err
 		var i Task
 		if err := rows.Scan(
 			&i.ID,
-			&i.BuildID,
+			&i.JobID,
+			&i.Name,
 			&i.Status,
-			&i.Step,
+			&i.Config,
 		); err != nil {
 			return nil, err
 		}
@@ -107,18 +131,18 @@ func (q *Queries) TasksByBuild(ctx context.Context, buildID string) ([]Task, err
 	return items, nil
 }
 
-const tasksByBuildAndStatus = `-- name: TasksByBuildAndStatus :many
-SELECT id, build_id, status, step FROM tasks
-  WHERE build_id = $1 AND status = $2
+const tasksByJobAndStatus = `-- name: TasksByJobAndStatus :many
+SELECT id, job_id, name, status, config FROM tasks
+  WHERE job_id = $1 AND status = $2
 `
 
-type TasksByBuildAndStatusParams struct {
-	BuildID string
-	Status  string
+type TasksByJobAndStatusParams struct {
+	JobID  string
+	Status string
 }
 
-func (q *Queries) TasksByBuildAndStatus(ctx context.Context, arg TasksByBuildAndStatusParams) ([]Task, error) {
-	rows, err := q.db.Query(ctx, tasksByBuildAndStatus, arg.BuildID, arg.Status)
+func (q *Queries) TasksByJobAndStatus(ctx context.Context, arg TasksByJobAndStatusParams) ([]Task, error) {
+	rows, err := q.db.Query(ctx, tasksByJobAndStatus, arg.JobID, arg.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -128,9 +152,10 @@ func (q *Queries) TasksByBuildAndStatus(ctx context.Context, arg TasksByBuildAnd
 		var i Task
 		if err := rows.Scan(
 			&i.ID,
-			&i.BuildID,
+			&i.JobID,
+			&i.Name,
 			&i.Status,
-			&i.Step,
+			&i.Config,
 		); err != nil {
 			return nil, err
 		}
@@ -143,7 +168,7 @@ func (q *Queries) TasksByBuildAndStatus(ctx context.Context, arg TasksByBuildAnd
 }
 
 const tasksByStatus = `-- name: TasksByStatus :many
-SELECT id, build_id, status, step FROM tasks
+SELECT id, job_id, name, status, config FROM tasks
   WHERE status = $1
 `
 
@@ -158,9 +183,10 @@ func (q *Queries) TasksByStatus(ctx context.Context, status string) ([]Task, err
 		var i Task
 		if err := rows.Scan(
 			&i.ID,
-			&i.BuildID,
+			&i.JobID,
+			&i.Name,
 			&i.Status,
-			&i.Step,
+			&i.Config,
 		); err != nil {
 			return nil, err
 		}
@@ -170,4 +196,38 @@ func (q *Queries) TasksByStatus(ctx context.Context, status string) ([]Task, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTask = `-- name: UpdateTask :exec
+UPDATE tasks
+  SET status = $2,
+    config = $3
+  WHERE id = $1
+`
+
+type UpdateTaskParams struct {
+	ID     string
+	Status string
+	Config []byte
+}
+
+func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
+	_, err := q.db.Exec(ctx, updateTask, arg.ID, arg.Status, arg.Config)
+	return err
+}
+
+const updateTaskStatus = `-- name: UpdateTaskStatus :exec
+UPDATE tasks
+  SET status = $2
+  WHERE id = $1
+`
+
+type UpdateTaskStatusParams struct {
+	ID     string
+	Status string
+}
+
+func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error {
+	_, err := q.db.Exec(ctx, updateTaskStatus, arg.ID, arg.Status)
+	return err
 }

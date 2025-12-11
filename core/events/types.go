@@ -9,9 +9,11 @@ const (
 	EventTypeScriptStart  EventType = "script:start"
 	EventTypeScriptFinish EventType = "script:finish"
 
-	EventTypeWorkerRegister EventType = "worker:register"
+	EventTypeBuildStatus EventType = "build:status"
+	EventTypeJobStatus   EventType = "job:status"
+	EventTypeTaskStatus  EventType = "task:status"
 
-	EventTypeLog EventType = "log"
+	EventTypeTaskLog EventType = "task:log"
 
 	EventTypeError EventType = "error"
 )

@@ -2,12 +2,18 @@
 SELECT * FROM builds
   WHERE id = $1 LIMIT 1;
 
+-- name: LockBuild :one
+SELECT * FROM builds
+  WHERE id = $1 LIMIT 1
+  FOR UPDATE;
+
 -- name: BuildsByWorkflow :many
 SELECT * FROM builds
   WHERE workflow_id = $1;
 
 -- name: CreateBuild :exec
-INSERT INTO builds (id, workflow_id, status, plan) VALUES ($1, $2, $3, $4);
+INSERT INTO builds (id, workflow_id, status, plan) 
+  VALUES ($1, $2, $3, $4);
 
 -- name: UpdateBuildStatus :exec
 UPDATE builds

@@ -1,36 +1,34 @@
 package workflower
 
-import "time"
-
-type BuildStatus string
-
-const (
-	BuildStatusCreated   BuildStatus = "created"
-	BuildStatusPending   BuildStatus = "pending"
-	BuildStatusStarted   BuildStatus = "started"
-	BuildStatusSucceeded BuildStatus = "succeeded"
-	BuildStatusFailed    BuildStatus = "failed"
-	BuildStatusErrored   BuildStatus = "errored"
-	BuildStatusAborted   BuildStatus = "aborted"
-)
-
-func (status BuildStatus) String() string {
-	return string(status)
-}
+import "github.com/sazonovItas/mini-ci/core/status"
 
 type Build struct {
-	ID         string      `json:"id"`
-	WorkflowID string      `json:"workflowId"`
-	Status     BuildStatus `json:"status"`
-	Plan       Plan        `json:"plan"`
-	StartedAt  *time.Time  `json:"startedAt,omitempty"`
-	FinishedAt *time.Time  `json:"finishedAt,omitempty"`
+	ID         string        `json:"id"`
+	WorkflowID string        `json:"workflowId"`
+	Status     status.Status `json:"status"`
+	Plan       Plan          `json:"plan"`
 }
 
-func (b Build) IsRunning() bool {
-	if b.Status == BuildStatusPending || b.Status == BuildStatusStarted {
-		return true
-	}
+type Job struct {
+	ID      string        `json:"id"`
+	BuildID string        `json:"buildId"`
+	Status  status.Status `json:"status"`
+	Plan    Plan          `json:"plan"`
+}
 
-	return false
+type Task struct {
+	ID     string        `json:"id"`
+	JobID  string        `json:"jobId"`
+	Name   string        `json:"name"`
+	Status status.Status `json:"status"`
+	Config Step          `json:"config"`
+}
+
+type Plan struct {
+	Ref  *OriginRef `json:"ref"`
+	Next *Plan      `json:"next"`
+}
+
+type OriginRef struct {
+	ID string `json:"id"`
 }

@@ -3,16 +3,20 @@ package events
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/sazonovItas/mini-ci/core/status"
 )
 
 func init() {
-	RegisterEvent[Log]()
-	RegisterEvent[Error]()
-	RegisterEvent[WorkerRegister]()
 	RegisterEvent[ContainerInitStart]()
 	RegisterEvent[ContainerInitFinish]()
 	RegisterEvent[ScriptStart]()
 	RegisterEvent[ScriptFinish]()
+	RegisterEvent[Log]()
+	RegisterEvent[Error]()
+	RegisterEvent[BuildStatus]()
+	RegisterEvent[JobStatus]()
+	RegisterEvent[TaskStatus]()
 }
 
 func RegisterEvent[T Event]() {
@@ -43,25 +47,17 @@ type Event interface {
 }
 
 type EventOrigin struct {
-	TaskID    string    `json:"taskId"`
+	ID        string    `json:"taskId"`
 	OccuredAt time.Time `json:"occuredAt"`
 }
 
-func NewEventOrigin(taskID string) EventOrigin {
-	return EventOrigin{TaskID: taskID, OccuredAt: time.Now().UTC()}
+func NewEventOrigin(id string) EventOrigin {
+	return EventOrigin{ID: id, OccuredAt: time.Now().UTC()}
 }
 
 func (o EventOrigin) Origin() EventOrigin {
 	return o
 }
-
-type WorkerRegister struct {
-	Name string `json:"name"`
-}
-
-func (WorkerRegister) Origin() EventOrigin { return EventOrigin{} }
-
-func (WorkerRegister) Type() EventType { return EventTypeWorkerRegister }
 
 type ContainerConfig struct {
 	Image string   `json:"image"`
@@ -114,7 +110,7 @@ type Log struct {
 	Messages    []LogMessage `json:"messages"`
 }
 
-func (Log) Type() EventType { return EventTypeLog }
+func (Log) Type() EventType { return EventTypeTaskLog }
 
 type Error struct {
 	EventOrigin `json:",inline"`
@@ -126,3 +122,26 @@ func (Error) Type() EventType { return EventTypeError }
 func NewErrorEvent(origin EventOrigin, msg string) Error {
 	return Error{EventOrigin: origin, Message: msg}
 }
+
+type ChangeStatus struct {
+	EventOrigin `json:",inline"`
+	Status      status.Status `json:"status"`
+}
+
+type BuildStatus ChangeStatus
+
+func (BuildStatus) Type() EventType { return EventTypeBuildStatus }
+
+type JobStatus struct {
+	ChangeStatus `json:",inline"`
+	BuildID      string `json:"buildId"`
+}
+
+func (JobStatus) Type() EventType { return EventTypeJobStatus }
+
+type TaskStatus struct {
+	ChangeStatus `json:",inline"`
+	JobID        string `json:"jobId"`
+}
+
+func (TaskStatus) Type() EventType { return EventTypeTaskStatus }

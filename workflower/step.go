@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-type StepStatus string
-
-func (status StepStatus) String() string {
-	return string(status)
-}
-
 type Step struct {
 	Config        StepConfig
 	UnknownFields map[string]*json.RawMessage
@@ -106,14 +100,6 @@ type StepDetector struct {
 
 var StepDetectors = []StepDetector{
 	{
-		Key: "job",
-		New: func() StepConfig { return &JobStep{} },
-	},
-	{
-		Key: "run",
-		New: func() StepConfig { return &RunStep{} },
-	},
-	{
 		Key: "container",
 		New: func() StepConfig { return &ContainerStep{} },
 	},
@@ -125,34 +111,26 @@ var StepDetectors = []StepDetector{
 
 type StepConfig any
 
-type JobStep struct {
-	Name string `json:"job"`
-}
-
-type RunStep struct {
-	Name string `json:"run"`
-}
-
 type ContainerOutputs struct {
-	ContainerID string `json:"containerId,omitempty"`
+	ContainerID string `json:"containerId"`
 }
 
 type ContainerStep struct {
-	Name    string           `json:"container"`
-	Image   []string         `json:"image"`
-	Env     []string         `json:"env,omitempty"`
-	Outputs ContainerOutputs `json:"outputs"`
+	Name    string            `json:"container"`
+	Image   []string          `json:"image"`
+	Env     []string          `json:"env,omitempty"`
+	Outputs *ContainerOutputs `json:"outputs,omitempty"`
 }
 
 type ScriptOutputs struct {
-	ExitStatus int  `json:"exit_status,omitempty"`
-	Success    bool `json:"success,omitempty"`
+	ExitStatus int  `json:"exit_status"`
+	Success    bool `json:"success"`
 }
 
 type ScriptStep struct {
-	Name        string        `json:"script"`
-	ContainerID string        `json:"containerId"`
-	Command     []string      `json:"command"`
-	Args        []string      `json:"args,omitempty"`
-	Outputs     ScriptOutputs `json:"outputs"`
+	Name        string         `json:"script"`
+	ContainerID string         `json:"containerId"`
+	Command     []string       `json:"command"`
+	Args        []string       `json:"args,omitempty"`
+	Outputs     *ScriptOutputs `json:"outputs,omitempty"`
 }

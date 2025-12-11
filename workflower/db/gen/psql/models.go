@@ -13,22 +13,29 @@ type Build struct {
 	WorkflowID string
 	Status     string
 	Plan       []byte
-	StartedAt  *time.Time
-	FinishedAt *time.Time
+}
+
+type Event struct {
+	OriginID  string
+	OccuredAt time.Time
+	EventType string
+	Payload   []byte
+}
+
+type Job struct {
+	ID      string
+	BuildID string
+	Name    string
+	Status  string
+	Plan    []byte
 }
 
 type Task struct {
-	ID      string
-	BuildID string
-	Status  string
-	Step    []byte
-}
-
-type TaskEvent struct {
-	TaskID    string
-	EventType string
-	OccuredAt time.Time
-	Payload   []byte
+	ID     string
+	JobID  string
+	Name   string
+	Status string
+	Config []byte
 }
 
 type TaskLog struct {

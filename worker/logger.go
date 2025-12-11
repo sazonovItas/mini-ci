@@ -1,16 +1,17 @@
 package worker
 
 import (
+	"context"
 	"time"
 
 	"github.com/sazonovItas/mini-ci/core/events"
 )
 
 type eventLoggerFactory struct {
-	publisher Publisher
+	publisher events.Publisher
 }
 
-func NewEventLoggerFactory(publisher Publisher) *eventLoggerFactory {
+func NewEventLoggerFactory(publisher events.Publisher) *eventLoggerFactory {
 	return &eventLoggerFactory{
 		publisher: publisher,
 	}
@@ -21,13 +22,13 @@ func (f *eventLoggerFactory) New(origin events.EventOrigin) EventLogger {
 }
 
 type eventLogger struct {
-	publisher Publisher
+	publisher events.Publisher
 	origin    events.EventOrigin
 }
 
-func NewEventLogger(sender Publisher, origin events.EventOrigin) *eventLogger {
+func NewEventLogger(publisher events.Publisher, origin events.EventOrigin) *eventLogger {
 	return &eventLogger{
-		publisher: sender,
+		publisher: publisher,
 		origin:    origin,
 	}
 }
@@ -86,7 +87,10 @@ func (l *eventLogger) sendMessages(messages []events.LogMessage) {
 		return
 	}
 
-	_ = l.publisher.Publish(events.Log{EventOrigin: l.origin, Messages: messages})
+	_ = l.publisher.Publish(
+		context.TODO(),
+		events.Log{EventOrigin: l.origin, Messages: messages},
+	)
 }
 
 func (l *eventLogger) newLogMessage(msg string) events.LogMessage {

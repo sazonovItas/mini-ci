@@ -19,10 +19,6 @@ type EventLoggerFactory interface {
 	New(origin events.EventOrigin) EventLogger
 }
 
-type Publisher interface {
-	Publish(event events.Event) error
-}
-
 type Runtime interface {
 	Pull(ctx context.Context, imageRef string) error
 	Container(ctx context.Context, id string) (*runtimespec.Container, error)
@@ -33,11 +29,11 @@ type EventProcessor struct {
 	wg sync.WaitGroup
 
 	runtime       Runtime
-	Publisher     Publisher
+	Publisher     events.Publisher
 	loggerFactory EventLoggerFactory
 }
 
-func NewEventProcessor(runtime Runtime, publisher Publisher) *EventProcessor {
+func NewEventProcessor(runtime Runtime, publisher events.Publisher) *EventProcessor {
 	return &EventProcessor{
 		runtime:       runtime,
 		Publisher:     publisher,
@@ -57,7 +53,7 @@ func (p *EventProcessor) Process(ctx context.Context, evch <-chan events.Event) 
 
 			p.wg.Go(func() {
 				if err := p.process(ctx, event); err != nil {
-					_ = p.Publisher.Publish(events.NewErrorEvent(event.Origin(), err.Error()))
+					_ = p.Publisher.Publish(ctx, events.NewErrorEvent(event.Origin(), err.Error()))
 				}
 			})
 		}
@@ -118,7 +114,7 @@ func (p *EventProcessor) containerInitStart(ctx context.Context, event events.Co
 		EventOrigin: event.Origin(),
 		ContainerID: container.ID(),
 	}
-	_ = p.Publisher.Publish(finishInitContainer)
+	_ = p.Publisher.Publish(ctx, finishInitContainer)
 
 	return nil
 }
@@ -161,7 +157,7 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 		ExitStatus:  exitStatus,
 		Succeeded:   exitStatus != 0,
 	}
-	_ = p.Publisher.Publish(finishScript)
+	_ = p.Publisher.Publish(ctx, finishScript)
 
 	return nil
 }

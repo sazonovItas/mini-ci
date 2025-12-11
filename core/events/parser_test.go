@@ -54,14 +54,6 @@ func TestMessageParsing(t *testing.T) {
 			},
 		},
 		{
-			name: "WorkerRegister event",
-			args: args{
-				Event: WorkerRegister{
-					Name: "test-worker",
-				},
-			},
-		},
-		{
 			name: "ContainerInitFinish event",
 			args: args{
 				Event: ContainerInitFinish{

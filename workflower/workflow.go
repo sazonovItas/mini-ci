@@ -11,7 +11,8 @@ type WorkflowConfig struct {
 }
 
 type JobConfig struct {
-	Run RunConfig `json:"run"`
+	Name string    `json:"name"`
+	Run  RunConfig `json:"run"`
 }
 
 type RunConfig struct {
@@ -22,6 +23,7 @@ type RunConfig struct {
 }
 
 type ScriptConfig struct {
+	Name    string   `json:"name"`
 	Command []string `json:"command"`
 	Args    []string `json:"args,omitempty"`
 }

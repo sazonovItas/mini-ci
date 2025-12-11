@@ -10,7 +10,7 @@ import (
 )
 
 const build = `-- name: Build :one
-SELECT id, workflow_id, status, plan, started_at, finished_at FROM builds
+SELECT id, workflow_id, status, plan FROM builds
   WHERE id = $1 LIMIT 1
 `
 
@@ -22,14 +22,12 @@ func (q *Queries) Build(ctx context.Context, id string) (Build, error) {
 		&i.WorkflowID,
 		&i.Status,
 		&i.Plan,
-		&i.StartedAt,
-		&i.FinishedAt,
 	)
 	return i, err
 }
 
 const buildsByWorkflow = `-- name: BuildsByWorkflow :many
-SELECT id, workflow_id, status, plan, started_at, finished_at FROM builds
+SELECT id, workflow_id, status, plan FROM builds
   WHERE workflow_id = $1
 `
 
@@ -47,8 +45,6 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 			&i.WorkflowID,
 			&i.Status,
 			&i.Plan,
-			&i.StartedAt,
-			&i.FinishedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -61,7 +57,8 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 }
 
 const createBuild = `-- name: CreateBuild :exec
-INSERT INTO builds (id, workflow_id, status, plan) VALUES ($1, $2, $3, $4)
+INSERT INTO builds (id, workflow_id, status, plan) 
+  VALUES ($1, $2, $3, $4)
 `
 
 type CreateBuildParams struct {
@@ -79,6 +76,24 @@ func (q *Queries) CreateBuild(ctx context.Context, arg CreateBuildParams) error 
 		arg.Plan,
 	)
 	return err
+}
+
+const lockBuild = `-- name: LockBuild :one
+SELECT id, workflow_id, status, plan FROM builds
+  WHERE id = $1 LIMIT 1
+  FOR UPDATE
+`
+
+func (q *Queries) LockBuild(ctx context.Context, id string) (Build, error) {
+	row := q.db.QueryRow(ctx, lockBuild, id)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.Status,
+		&i.Plan,
+	)
+	return i, err
 }
 
 const updateBuildStatus = `-- name: UpdateBuildStatus :exec

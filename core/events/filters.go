@@ -10,8 +10,8 @@ func WithEventType(types ...EventType) FilterFunc {
 	}
 }
 
-func WithEventOriginTaskID(id string) FilterFunc {
+func WithEventOriginID(id string) FilterFunc {
 	return func(e Event) bool {
-		return e.Origin().TaskID == id
+		return e.Origin().ID == id
 	}
 }
