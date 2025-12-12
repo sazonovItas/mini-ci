@@ -101,7 +101,7 @@ type StepDetector struct {
 var StepDetectors = []StepDetector{
 	{
 		Key: "container",
-		New: func() StepConfig { return &ContainerStep{} },
+		New: func() StepConfig { return &ContainerInitStep{} },
 	},
 	{
 		Key: "script",
@@ -115,7 +115,7 @@ type ContainerOutputs struct {
 	ContainerID string `json:"containerId"`
 }
 
-type ContainerStep struct {
+type ContainerInitStep struct {
 	Name    string            `json:"container"`
 	Image   []string          `json:"image"`
 	Env     []string          `json:"env,omitempty"`

@@ -47,7 +47,7 @@ type Event interface {
 }
 
 type EventOrigin struct {
-	ID        string    `json:"taskId"`
+	ID        string    `json:"id"`
 	OccuredAt time.Time `json:"occuredAt"`
 }
 
@@ -78,6 +78,13 @@ type ContainerInitFinish struct {
 }
 
 func (ContainerInitFinish) Type() EventType { return EventTypeContainerInitFinish }
+
+type ContainerDestoy struct {
+	EventOrigin `json:",inline"`
+	ContainerID string `json:"containerId"`
+}
+
+func (ContainerDestoy) Type() EventType { return EventTypeContainerDestroy }
 
 type ScriptConfig struct {
 	ContainerID string   `json:"containerId"`

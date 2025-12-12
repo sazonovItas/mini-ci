@@ -5,6 +5,7 @@ type EventType string
 const (
 	EventTypeContainerInitStart  EventType = "container:init:start"
 	EventTypeContainerInitFinish EventType = "container:init:finish"
+	EventTypeContainerDestroy    EventType = "container:destroy"
 
 	EventTypeScriptStart  EventType = "script:start"
 	EventTypeScriptFinish EventType = "script:finish"

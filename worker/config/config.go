@@ -20,7 +20,7 @@ type RuntimeConfig struct {
 }
 
 type SocketIOConfig struct {
-	Address        string `yaml:"address" mapstructure:"address"`
-	Endpoint       string `yaml:"endpoint" mapstructure:"endpoint"`
-	EventNamespace string `yaml:"event_namespace" mapstructure:"event_namespace"`
+	URL       string `yaml:"url" mapstructure:"url"`
+	Namespace string `yaml:"namespace" mapstructure:"namespace"`
+	EventName string `yaml:"event_name" mapstructure:"event_name"`
 }

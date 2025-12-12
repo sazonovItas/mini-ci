@@ -8,6 +8,7 @@ import (
 	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
 	runtimespec "github.com/sazonovItas/mini-ci/worker/runtime"
+	"github.com/sazonovItas/mini-ci/worker/runtime/logging"
 )
 
 type EventLogger interface {
@@ -23,6 +24,7 @@ type Runtime interface {
 	Pull(ctx context.Context, imageRef string) error
 	Container(ctx context.Context, id string) (*runtimespec.Container, error)
 	Create(ctx context.Context, spec runtimespec.ContainerConfig) (*runtimespec.Container, error)
+	Destroy(ctx context.Context, id string) error
 }
 
 type EventProcessor struct {
@@ -31,6 +33,8 @@ type EventProcessor struct {
 	runtime       Runtime
 	Publisher     events.Publisher
 	loggerFactory EventLoggerFactory
+
+	defaultLogger logging.Logger
 }
 
 func NewEventProcessor(runtime Runtime, publisher events.Publisher) *EventProcessor {
@@ -38,6 +42,7 @@ func NewEventProcessor(runtime Runtime, publisher events.Publisher) *EventProces
 		runtime:       runtime,
 		Publisher:     publisher,
 		loggerFactory: NewEventLoggerFactory(publisher),
+		defaultLogger: logging.NewJSONLogger("/var/lib/minici"),
 	}
 }
 
@@ -78,6 +83,9 @@ func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 
 	case events.ScriptStart:
 		return p.scriptStart(ctx, event)
+
+	case events.ContainerDestoy:
+		return p.containerDestroy(ctx, event)
 
 	default:
 		log.G(ctx).Errorf("cannot process event: %s", event.Type())
@@ -138,7 +146,7 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 
 	evLogger.Log("created script task")
 
-	task, err := container.Start(ctx, evLogger)
+	task, err := container.Start(ctx, evLogger, p.defaultLogger)
 	if err != nil {
 		evLogger.Log("failed to start task")
 		return err
@@ -158,6 +166,14 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 		Succeeded:   exitStatus != 0,
 	}
 	_ = p.Publisher.Publish(ctx, finishScript)
+
+	return nil
+}
+
+func (p *EventProcessor) containerDestroy(ctx context.Context, event events.ContainerDestoy) error {
+	if err := p.runtime.Destroy(ctx, event.ContainerID); err != nil {
+		log.G(ctx).WithError(err).Errorf("failed to destroy container %s", event.ContainerID)
+	}
 
 	return nil
 }

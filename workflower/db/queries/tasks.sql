@@ -26,12 +26,6 @@ SELECT * FROM tasks
 INSERT INTO tasks (id, job_id, name, status, config) 
   VALUES ($1, $2, $3, $4, $5);
 
--- name: UpdateTask :exec
-UPDATE tasks
-  SET status = $2,
-    config = $3
-  WHERE id = $1;
-
 -- name: UpdateTaskStatus :exec
 UPDATE tasks
   SET status = $2

@@ -1,0 +1,9 @@
+api:
+  address: ":8080"
+
+worker_io:
+  address: ":8081"
+  endpoint: "/socket.io/"
+
+postgres:
+  uri: postgres://minici:minici@localhost:5432/minici?search_path=minici

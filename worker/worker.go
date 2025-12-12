@@ -28,9 +28,9 @@ func New(cfg config.Config) (*Worker, error) {
 
 	sockerIORunner := NewSocketIORunner(
 		cfg.Name,
-		cfg.SocketIO.Address,
-		cfg.SocketIO.Endpoint,
-		cfg.SocketIO.EventNamespace,
+		cfg.SocketIO.URL,
+		cfg.SocketIO.Namespace,
+		cfg.SocketIO.EventName,
 	)
 
 	eventProcessor := NewEventProcessor(ctrRuntime, sockerIORunner)

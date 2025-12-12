@@ -60,6 +60,7 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 		case log, ok := <-stdout:
 			if !ok {
 				isOutClosed = true
+				stdout = nil
 				break
 			}
 
@@ -68,6 +69,7 @@ func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan str
 		case log, ok := <-stderr:
 			if !ok {
 				isErrClosed = true
+				stderr = nil
 				break
 			}
 

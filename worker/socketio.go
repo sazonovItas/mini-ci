@@ -16,14 +16,13 @@ import (
 )
 
 const (
-	recvDiscardTImeout = 250 * time.Millisecond
-	sendDiscardTimeout = 250 * time.Millisecond
+	queueDiscardTimeout = 250 * time.Millisecond
 )
 
 type SocketIORunner struct {
-	name           string
-	endpoint       string
-	eventNamespace string
+	name      string
+	namespace string
+	eventName string
 
 	manager *socket.Manager
 
@@ -34,9 +33,8 @@ type SocketIORunner struct {
 	cancel context.CancelFunc
 }
 
-func NewSocketIORunner(name, address, endpoint, eventNamespace string) *SocketIORunner {
+func NewSocketIORunner(name, address, namespace, eventName string) *SocketIORunner {
 	opts := socket.DefaultOptions()
-	opts.SetTimeout(60 * time.Second)
 	opts.SetUpgrade(true)
 	opts.SetAutoConnect(true)
 	opts.SetReconnection(true)
@@ -46,19 +44,19 @@ func NewSocketIORunner(name, address, endpoint, eventNamespace string) *SocketIO
 	manager := socket.NewManager(address, opts)
 
 	return &SocketIORunner{
-		name:           name,
-		endpoint:       endpoint,
-		eventNamespace: eventNamespace,
-		manager:        manager,
-		recvq:          eventq.New(recvDiscardTImeout, func(events.Event) {}),
-		sendq:          eventq.New(sendDiscardTimeout, func(events.Event) {}),
+		name:      name,
+		namespace: namespace,
+		eventName: eventName,
+		manager:   manager,
+		recvq:     eventq.New(queueDiscardTimeout, func(events.Event) {}),
+		sendq:     eventq.New(queueDiscardTimeout, func(events.Event) {}),
 	}
 }
 
 func (r *SocketIORunner) Start(ctx context.Context) error {
 	r.ctx, r.cancel = context.WithCancel(ctx)
 
-	socket := r.manager.Socket(r.endpoint, nil)
+	socket := r.manager.Socket(r.namespace, nil)
 
 	if err := r.registerEvents(socket); err != nil {
 		return err
@@ -70,10 +68,10 @@ func (r *SocketIORunner) Start(ctx context.Context) error {
 }
 
 func (r *SocketIORunner) Stop(ctx context.Context) error {
+	r.cancel()
+
 	r.recvq.Shutdown()
 	r.sendq.Shutdown()
-
-	r.cancel()
 
 	return nil
 }
@@ -88,7 +86,7 @@ func (r *SocketIORunner) Events() (<-chan events.Event, io.Closer) {
 }
 
 func (r *SocketIORunner) registerEvents(socket *socket.Socket) (err error) {
-	err = socket.On(types.EventName(r.eventNamespace), func(msgs ...any) {
+	err = socket.On(types.EventName(r.eventName), func(msgs ...any) {
 		if len(msgs) == 0 {
 			return
 		}
@@ -108,7 +106,7 @@ func (r *SocketIORunner) registerEvents(socket *socket.Socket) (err error) {
 		r.recvq.Publish(message.Event)
 	})
 	if err != nil {
-		return fmt.Errorf("failed register event listener on %s: %w", r.eventNamespace, err)
+		return fmt.Errorf("failed register event listener on %s: %w", r.eventName, err)
 	}
 
 	return nil
@@ -130,7 +128,7 @@ func (r *SocketIORunner) startSender(ctx context.Context, socket *socket.Socket)
 			return
 		case event := <-evch:
 			msg := events.Message{Event: event}
-			if err := socket.Emit(r.eventNamespace, msg); err != nil {
+			if err := socket.Emit(r.eventName, msg); err != nil {
 				log.G(ctx).WithError(err).Errorf("failed to send event %s", event.Type())
 				go r.requeueEventAfter(ctx, event, requeueEventTimeout)
 			}

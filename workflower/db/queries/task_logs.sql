@@ -4,11 +4,11 @@ SELECT * FROM task_logs
   ORDER BY time DESC
   LIMIT $2;
 
--- name: LastTaskLogsSince :many
+-- name: LastTaskLogsSinceWithLimit :many
 SELECT * FROM task_logs
   WHERE task_id = $1 AND time > $2
   LIMIT $3;
 
--- name: CreateTaskLog :exec
+-- name: SaveTaskLog :exec
 INSERT INTO task_logs (task_id, message, time)
   VALUES ($1, $2, $3);
