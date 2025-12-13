@@ -11,11 +11,29 @@ SELECT * FROM builds
 SELECT * FROM builds
   WHERE workflow_id = $1;
 
--- name: CreateBuild :exec
-INSERT INTO builds (id, workflow_id, status, plan) 
-  VALUES ($1, $2, $3, $4);
+-- name: BuildsByStatus :many
+SELECT * FROM builds
+  WHERE status = $1;
 
--- name: UpdateBuildStatus :exec
+-- name: CreateBuild :one
+INSERT INTO builds (id, workflow_id, status, config, plan) 
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING *;
+
+-- name: CreateEmptyBuild :one
+INSERT INTO builds (id, workflow_id, status) 
+  VALUES ($1, $2, $3)
+  RETURNING *;
+
+-- name: UpdateBuild :one
+UPDATE builds
+  set status = $2,
+    plan = $3
+  WHERE id = $1
+  RETURNING *;
+
+-- name: UpdateBuildStatus :one
 UPDATE builds
   SET status = $2
-  WHERE id = $1;
+  WHERE id = $1
+  RETURNING *;

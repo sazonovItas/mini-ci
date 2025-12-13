@@ -1,4 +1,4 @@
-package workflower
+package model
 
 type Workflow struct {
 	ID     string         `json:"id"`

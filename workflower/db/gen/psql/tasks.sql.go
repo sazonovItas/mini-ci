@@ -9,9 +9,41 @@ import (
 	"context"
 )
 
-const createTask = `-- name: CreateTask :exec
+const createEmptyTask = `-- name: CreateEmptyTask :one
+INSERT INTO tasks (id, job_id, name, status) 
+  VALUES ($1, $2, $3, $4)
+  RETURNING id, job_id, name, status, config
+`
+
+type CreateEmptyTaskParams struct {
+	ID     string
+	JobID  string
+	Name   string
+	Status string
+}
+
+func (q *Queries) CreateEmptyTask(ctx context.Context, arg CreateEmptyTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, createEmptyTask,
+		arg.ID,
+		arg.JobID,
+		arg.Name,
+		arg.Status,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+	)
+	return i, err
+}
+
+const createTask = `-- name: CreateTask :one
 INSERT INTO tasks (id, job_id, name, status, config) 
   VALUES ($1, $2, $3, $4, $5)
+  RETURNING id, job_id, name, status, config
 `
 
 type CreateTaskParams struct {
@@ -22,15 +54,23 @@ type CreateTaskParams struct {
 	Config []byte
 }
 
-func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) error {
-	_, err := q.db.Exec(ctx, createTask,
+func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, createTask,
 		arg.ID,
 		arg.JobID,
 		arg.Name,
 		arg.Status,
 		arg.Config,
 	)
-	return err
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+	)
+	return i, err
 }
 
 const lockTask = `-- name: LockTask :one
@@ -198,28 +238,11 @@ func (q *Queries) TasksByStatus(ctx context.Context, status string) ([]Task, err
 	return items, nil
 }
 
-const updateTask = `-- name: UpdateTask :exec
-UPDATE tasks
-  SET status = $2,
-    config = $3
-  WHERE id = $1
-`
-
-type UpdateTaskParams struct {
-	ID     string
-	Status string
-	Config []byte
-}
-
-func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
-	_, err := q.db.Exec(ctx, updateTask, arg.ID, arg.Status, arg.Config)
-	return err
-}
-
-const updateTaskStatus = `-- name: UpdateTaskStatus :exec
+const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks
   SET status = $2
   WHERE id = $1
+  RETURNING id, job_id, name, status, config
 `
 
 type UpdateTaskStatusParams struct {
@@ -227,7 +250,15 @@ type UpdateTaskStatusParams struct {
 	Status string
 }
 
-func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) error {
-	_, err := q.db.Exec(ctx, updateTaskStatus, arg.ID, arg.Status)
-	return err
+func (q *Queries) UpdateTaskStatus(ctx context.Context, arg UpdateTaskStatusParams) (Task, error) {
+	row := q.db.QueryRow(ctx, updateTaskStatus, arg.ID, arg.Status)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+	)
+	return i, err
 }

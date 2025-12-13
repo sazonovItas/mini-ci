@@ -9,9 +9,10 @@ import (
 	"context"
 )
 
-const createWorkflow = `-- name: CreateWorkflow :exec
+const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (id, name, config) 
   VALUES ($1, $2, $3)
+  RETURNING id, name, config
 `
 
 type CreateWorkflowParams struct {
@@ -20,9 +21,11 @@ type CreateWorkflowParams struct {
 	Config []byte
 }
 
-func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) error {
-	_, err := q.db.Exec(ctx, createWorkflow, arg.ID, arg.Name, arg.Config)
-	return err
+func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, createWorkflow, arg.ID, arg.Name, arg.Config)
+	var i Workflow
+	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	return i, err
 }
 
 const workflow = `-- name: Workflow :one
@@ -47,4 +50,34 @@ func (q *Queries) WorkflowByName(ctx context.Context, name string) (Workflow, er
 	var i Workflow
 	err := row.Scan(&i.ID, &i.Name, &i.Config)
 	return i, err
+}
+
+const workflows = `-- name: Workflows :many
+SELECT id, name, config FROM workflows 
+  OFFSET $1 LIMIT $2
+`
+
+type WorkflowsParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) Workflows(ctx context.Context, arg WorkflowsParams) ([]Workflow, error) {
+	rows, err := q.db.Query(ctx, workflows, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workflow
+	for rows.Next() {
+		var i Workflow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Config); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

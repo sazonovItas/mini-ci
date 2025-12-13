@@ -9,9 +9,42 @@ import (
 	"context"
 )
 
-const createJob = `-- name: CreateJob :exec
-INSERT INTO jobs (id, build_id, name, status, plan)
-  VALUES ($1, $2, $3, $4, $5)
+const createEmptyJob = `-- name: CreateEmptyJob :one
+INSERT INTO jobs (id, build_id, name, status)
+  VALUES ($1, $2, $3, $4)
+  RETURNING id, build_id, name, status, config, plan
+`
+
+type CreateEmptyJobParams struct {
+	ID      string
+	BuildID string
+	Name    string
+	Status  string
+}
+
+func (q *Queries) CreateEmptyJob(ctx context.Context, arg CreateEmptyJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, createEmptyJob,
+		arg.ID,
+		arg.BuildID,
+		arg.Name,
+		arg.Status,
+	)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const createJob = `-- name: CreateJob :one
+INSERT INTO jobs (id, build_id, name, status, config, plan)
+  VALUES ($1, $2, $3, $4, $5, $6)
+  RETURNING id, build_id, name, status, config, plan
 `
 
 type CreateJobParams struct {
@@ -19,22 +52,33 @@ type CreateJobParams struct {
 	BuildID string
 	Name    string
 	Status  string
+	Config  []byte
 	Plan    []byte
 }
 
-func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) error {
-	_, err := q.db.Exec(ctx, createJob,
+func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, error) {
+	row := q.db.QueryRow(ctx, createJob,
 		arg.ID,
 		arg.BuildID,
 		arg.Name,
 		arg.Status,
+		arg.Config,
 		arg.Plan,
 	)
-	return err
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
 }
 
 const job = `-- name: Job :one
-SELECT id, build_id, name, status, plan FROM jobs
+SELECT id, build_id, name, status, config, plan FROM jobs
   WHERE id = $1
 `
 
@@ -46,13 +90,14 @@ func (q *Queries) Job(ctx context.Context, id string) (Job, error) {
 		&i.BuildID,
 		&i.Name,
 		&i.Status,
+		&i.Config,
 		&i.Plan,
 	)
 	return i, err
 }
 
 const jobsByBuild = `-- name: JobsByBuild :many
-SELECT id, build_id, name, status, plan FROM jobs
+SELECT id, build_id, name, status, config, plan FROM jobs
   WHERE build_id = $1
 `
 
@@ -70,6 +115,39 @@ func (q *Queries) JobsByBuild(ctx context.Context, buildID string) ([]Job, error
 			&i.BuildID,
 			&i.Name,
 			&i.Status,
+			&i.Config,
+			&i.Plan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const jobsByStatus = `-- name: JobsByStatus :many
+SELECT id, build_id, name, status, config, plan FROM jobs
+  WHERE status = $1
+`
+
+func (q *Queries) JobsByStatus(ctx context.Context, status string) ([]Job, error) {
+	rows, err := q.db.Query(ctx, jobsByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Job
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.Name,
+			&i.Status,
+			&i.Config,
 			&i.Plan,
 		); err != nil {
 			return nil, err
@@ -83,7 +161,7 @@ func (q *Queries) JobsByBuild(ctx context.Context, buildID string) ([]Job, error
 }
 
 const lockJob = `-- name: LockJob :one
-SELECT id, build_id, name, status, plan FROM jobs
+SELECT id, build_id, name, status, config, plan FROM jobs
   WHERE id = $1 LIMIT 1
   FOR UPDATE
 `
@@ -96,15 +174,17 @@ func (q *Queries) LockJob(ctx context.Context, id string) (Job, error) {
 		&i.BuildID,
 		&i.Name,
 		&i.Status,
+		&i.Config,
 		&i.Plan,
 	)
 	return i, err
 }
 
-const updateJobStatus = `-- name: UpdateJobStatus :exec
+const updateJobStatus = `-- name: UpdateJobStatus :one
 UPDATE jobs
   SET status = $2
   WHERE id = $1
+  RETURNING id, build_id, name, status, config, plan
 `
 
 type UpdateJobStatusParams struct {
@@ -112,7 +192,16 @@ type UpdateJobStatusParams struct {
 	Status string
 }
 
-func (q *Queries) UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams) error {
-	_, err := q.db.Exec(ctx, updateJobStatus, arg.ID, arg.Status)
-	return err
+func (q *Queries) UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams) (Job, error) {
+	row := q.db.QueryRow(ctx, updateJobStatus, arg.ID, arg.Status)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.BuildID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
 }

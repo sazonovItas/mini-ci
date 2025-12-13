@@ -10,36 +10,20 @@ import (
 	"time"
 )
 
-const createTaskLog = `-- name: CreateTaskLog :exec
-INSERT INTO task_logs (task_id, message, time)
-  VALUES ($1, $2, $3)
-`
-
-type CreateTaskLogParams struct {
-	TaskID  string
-	Message string
-	Time    time.Time
-}
-
-func (q *Queries) CreateTaskLog(ctx context.Context, arg CreateTaskLogParams) error {
-	_, err := q.db.Exec(ctx, createTaskLog, arg.TaskID, arg.Message, arg.Time)
-	return err
-}
-
-const lastTaskLogsSince = `-- name: LastTaskLogsSince :many
+const lastTaskLogsWithLimit = `-- name: LastTaskLogsWithLimit :many
 SELECT task_id, message, time FROM task_logs
-  WHERE task_id = $1 AND time > $2
-  LIMIT $3
+  WHERE task_id = $1
+  ORDER BY time DESC
+  LIMIT $2
 `
 
-type LastTaskLogsSinceParams struct {
+type LastTaskLogsWithLimitParams struct {
 	TaskID string
-	Time   time.Time
 	Limit  int32
 }
 
-func (q *Queries) LastTaskLogsSince(ctx context.Context, arg LastTaskLogsSinceParams) ([]TaskLog, error) {
-	rows, err := q.db.Query(ctx, lastTaskLogsSince, arg.TaskID, arg.Time, arg.Limit)
+func (q *Queries) LastTaskLogsWithLimit(ctx context.Context, arg LastTaskLogsWithLimitParams) ([]TaskLog, error) {
+	rows, err := q.db.Query(ctx, lastTaskLogsWithLimit, arg.TaskID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -58,20 +42,37 @@ func (q *Queries) LastTaskLogsSince(ctx context.Context, arg LastTaskLogsSincePa
 	return items, nil
 }
 
-const lastTaskLogsWithLimit = `-- name: LastTaskLogsWithLimit :many
-SELECT task_id, message, time FROM task_logs
-  WHERE task_id = $1
-  ORDER BY time DESC
-  LIMIT $2
+const saveTaskLog = `-- name: SaveTaskLog :exec
+INSERT INTO task_logs (task_id, message, time)
+  VALUES ($1, $2, $3)
 `
 
-type LastTaskLogsWithLimitParams struct {
+type SaveTaskLogParams struct {
+	TaskID  string
+	Message string
+	Time    time.Time
+}
+
+func (q *Queries) SaveTaskLog(ctx context.Context, arg SaveTaskLogParams) error {
+	_, err := q.db.Exec(ctx, saveTaskLog, arg.TaskID, arg.Message, arg.Time)
+	return err
+}
+
+const taskLogsSinceWithLimit = `-- name: TaskLogsSinceWithLimit :many
+SELECT task_id, message, time FROM task_logs
+  WHERE task_id = $1 AND time > $2
+  ORDER BY time DESC
+  LIMIT $3
+`
+
+type TaskLogsSinceWithLimitParams struct {
 	TaskID string
+	Time   time.Time
 	Limit  int32
 }
 
-func (q *Queries) LastTaskLogsWithLimit(ctx context.Context, arg LastTaskLogsWithLimitParams) ([]TaskLog, error) {
-	rows, err := q.db.Query(ctx, lastTaskLogsWithLimit, arg.TaskID, arg.Limit)
+func (q *Queries) TaskLogsSinceWithLimit(ctx context.Context, arg TaskLogsSinceWithLimitParams) ([]TaskLog, error) {
+	rows, err := q.db.Query(ctx, taskLogsSinceWithLimit, arg.TaskID, arg.Time, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

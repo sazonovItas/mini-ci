@@ -4,9 +4,10 @@ SELECT * FROM task_logs
   ORDER BY time DESC
   LIMIT $2;
 
--- name: LastTaskLogsSinceWithLimit :many
+-- name: TaskLogsSinceWithLimit :many
 SELECT * FROM task_logs
   WHERE task_id = $1 AND time > $2
+  ORDER BY time DESC
   LIMIT $3;
 
 -- name: SaveTaskLog :exec

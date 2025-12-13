@@ -6,6 +6,11 @@ SELECT * FROM workflows
 SELECT * FROM workflows
   WHERE name = $1 LIMIT 1;
 
--- name: CreateWorkflow :exec
+-- name: Workflows :many
+SELECT * FROM workflows 
+  OFFSET $1 LIMIT $2;
+
+-- name: CreateWorkflow :one
 INSERT INTO workflows (id, name, config) 
-  VALUES ($1, $2, $3);
+  VALUES ($1, $2, $3)
+  RETURNING *;

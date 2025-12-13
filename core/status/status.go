@@ -13,6 +13,39 @@ const (
 	StatusAborted   Status = "aborted"
 )
 
-func (status Status) String() string {
-	return string(status)
+func (s Status) String() string {
+	return string(s)
+}
+
+func (s Status) IsRunning() bool {
+	return s == StatusPending || s == StatusStarted
+}
+
+func (s Status) IsFinished() bool {
+	return s == StatusSkipped || s == StatusSucceeded ||
+		s == StatusFailed || s == StatusErrored || s == StatusAborted
+}
+
+func (s Status) IsCreated() bool {
+	return s == StatusCreated
+}
+
+func (s Status) IsSkipped() bool {
+	return s == StatusSkipped
+}
+
+func (s Status) IsSucceeded() bool {
+	return s == StatusSucceeded
+}
+
+func (s Status) IsFailed() bool {
+	return s == StatusFailed
+}
+
+func (s Status) IsErrored() bool {
+	return s == StatusErrored
+}
+
+func (s Status) IsAborted() bool {
+	return s == StatusAborted
 }

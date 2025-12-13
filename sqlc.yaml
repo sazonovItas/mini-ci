@@ -1,12 +1,12 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "queries"
-    schema: "migrations"
+    queries: "workflower/db/queries"
+    schema: "workflower/db/migrations"
     gen:
       go:
         package: "psql"
-        out: "gen/psql"
+        out: "workflower/db/gen/psql"
         sql_package: "pgx/v5"
         overrides:
           - db_type: "pg_catalog.timestamp"

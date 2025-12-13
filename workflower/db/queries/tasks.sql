@@ -22,11 +22,18 @@ SELECT * FROM tasks
 SELECT * FROM tasks
   WHERE job_id = $1 AND status = $2;
 
--- name: CreateTask :exec
+-- name: CreateTask :one
 INSERT INTO tasks (id, job_id, name, status, config) 
-  VALUES ($1, $2, $3, $4, $5);
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING *;
 
--- name: UpdateTaskStatus :exec
+-- name: CreateEmptyTask :one
+INSERT INTO tasks (id, job_id, name, status) 
+  VALUES ($1, $2, $3, $4)
+  RETURNING *;
+
+-- name: UpdateTaskStatus :one
 UPDATE tasks
   SET status = $2
-  WHERE id = $1;
+  WHERE id = $1
+  RETURNING *;

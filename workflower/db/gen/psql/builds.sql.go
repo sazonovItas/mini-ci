@@ -10,7 +10,7 @@ import (
 )
 
 const build = `-- name: Build :one
-SELECT id, workflow_id, status, plan FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE id = $1 LIMIT 1
 `
 
@@ -21,13 +21,45 @@ func (q *Queries) Build(ctx context.Context, id string) (Build, error) {
 		&i.ID,
 		&i.WorkflowID,
 		&i.Status,
+		&i.Config,
 		&i.Plan,
 	)
 	return i, err
 }
 
+const buildsByStatus = `-- name: BuildsByStatus :many
+SELECT id, workflow_id, status, config, plan FROM builds
+  WHERE status = $1
+`
+
+func (q *Queries) BuildsByStatus(ctx context.Context, status string) ([]Build, error) {
+	rows, err := q.db.Query(ctx, buildsByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Build
+	for rows.Next() {
+		var i Build
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.Status,
+			&i.Config,
+			&i.Plan,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const buildsByWorkflow = `-- name: BuildsByWorkflow :many
-SELECT id, workflow_id, status, plan FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE workflow_id = $1
 `
 
@@ -44,6 +76,7 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 			&i.ID,
 			&i.WorkflowID,
 			&i.Status,
+			&i.Config,
 			&i.Plan,
 		); err != nil {
 			return nil, err
@@ -56,30 +89,66 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 	return items, nil
 }
 
-const createBuild = `-- name: CreateBuild :exec
-INSERT INTO builds (id, workflow_id, status, plan) 
-  VALUES ($1, $2, $3, $4)
+const createBuild = `-- name: CreateBuild :one
+INSERT INTO builds (id, workflow_id, status, config, plan) 
+  VALUES ($1, $2, $3, $4, $5)
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type CreateBuildParams struct {
 	ID         string
 	WorkflowID string
 	Status     string
+	Config     []byte
 	Plan       []byte
 }
 
-func (q *Queries) CreateBuild(ctx context.Context, arg CreateBuildParams) error {
-	_, err := q.db.Exec(ctx, createBuild,
+func (q *Queries) CreateBuild(ctx context.Context, arg CreateBuildParams) (Build, error) {
+	row := q.db.QueryRow(ctx, createBuild,
 		arg.ID,
 		arg.WorkflowID,
 		arg.Status,
+		arg.Config,
 		arg.Plan,
 	)
-	return err
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const createEmptyBuild = `-- name: CreateEmptyBuild :one
+INSERT INTO builds (id, workflow_id, status) 
+  VALUES ($1, $2, $3)
+  RETURNING id, workflow_id, status, config, plan
+`
+
+type CreateEmptyBuildParams struct {
+	ID         string
+	WorkflowID string
+	Status     string
+}
+
+func (q *Queries) CreateEmptyBuild(ctx context.Context, arg CreateEmptyBuildParams) (Build, error) {
+	row := q.db.QueryRow(ctx, createEmptyBuild, arg.ID, arg.WorkflowID, arg.Status)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
 }
 
 const lockBuild = `-- name: LockBuild :one
-SELECT id, workflow_id, status, plan FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE id = $1 LIMIT 1
   FOR UPDATE
 `
@@ -91,15 +160,44 @@ func (q *Queries) LockBuild(ctx context.Context, id string) (Build, error) {
 		&i.ID,
 		&i.WorkflowID,
 		&i.Status,
+		&i.Config,
 		&i.Plan,
 	)
 	return i, err
 }
 
-const updateBuildStatus = `-- name: UpdateBuildStatus :exec
+const updateBuild = `-- name: UpdateBuild :one
+UPDATE builds
+  set status = $2,
+    plan = $3
+  WHERE id = $1
+  RETURNING id, workflow_id, status, config, plan
+`
+
+type UpdateBuildParams struct {
+	ID     string
+	Status string
+	Plan   []byte
+}
+
+func (q *Queries) UpdateBuild(ctx context.Context, arg UpdateBuildParams) (Build, error) {
+	row := q.db.QueryRow(ctx, updateBuild, arg.ID, arg.Status, arg.Plan)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
+}
+
+const updateBuildStatus = `-- name: UpdateBuildStatus :one
 UPDATE builds
   SET status = $2
   WHERE id = $1
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type UpdateBuildStatusParams struct {
@@ -107,7 +205,15 @@ type UpdateBuildStatusParams struct {
 	Status string
 }
 
-func (q *Queries) UpdateBuildStatus(ctx context.Context, arg UpdateBuildStatusParams) error {
-	_, err := q.db.Exec(ctx, updateBuildStatus, arg.ID, arg.Status)
-	return err
+func (q *Queries) UpdateBuildStatus(ctx context.Context, arg UpdateBuildStatusParams) (Build, error) {
+	row := q.db.QueryRow(ctx, updateBuildStatus, arg.ID, arg.Status)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.Status,
+		&i.Config,
+		&i.Plan,
+	)
+	return i, err
 }

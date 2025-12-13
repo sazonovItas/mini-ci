@@ -1,4 +1,4 @@
-package workflower
+package model
 
 import (
 	"encoding/json"
@@ -107,6 +107,10 @@ var StepDetectors = []StepDetector{
 		Key: "script",
 		New: func() StepConfig { return &ScriptStep{} },
 	},
+	{
+		Key: "cleanup",
+		New: func() StepConfig { return &CleanupStep{} },
+	},
 }
 
 type StepConfig any
@@ -118,7 +122,7 @@ type ContainerOutputs struct {
 type ContainerInitStep struct {
 	Name    string            `json:"container"`
 	Image   []string          `json:"image"`
-	Env     []string          `json:"env,omitempty"`
+	Env     []string          `json:"env"`
 	Outputs *ContainerOutputs `json:"outputs,omitempty"`
 }
 
@@ -131,6 +135,11 @@ type ScriptStep struct {
 	Name        string         `json:"script"`
 	ContainerID string         `json:"containerId"`
 	Command     []string       `json:"command"`
-	Args        []string       `json:"args,omitempty"`
+	Args        []string       `json:"args"`
 	Outputs     *ScriptOutputs `json:"outputs,omitempty"`
+}
+
+type CleanupStep struct {
+	Name        string `json:"cleanup"`
+	ContainerID string `json:"containerId"`
 }

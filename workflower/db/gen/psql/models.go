@@ -12,6 +12,7 @@ type Build struct {
 	ID         string
 	WorkflowID string
 	Status     string
+	Config     []byte
 	Plan       []byte
 }
 
@@ -27,6 +28,7 @@ type Job struct {
 	BuildID string
 	Name    string
 	Status  string
+	Config  []byte
 	Plan    []byte
 }
 

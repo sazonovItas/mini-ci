@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS builds (
   id          varchar(36) NOT NULL,
   workflow_id varchar(36) NOT NULL,
   status      text        NOT NULL,
-  plan        jsonb       NOT NULL,
+  config      jsonb       DEFAULT NULL,
+  plan        jsonb       DEFAULT NULL,
   PRIMARY KEY (id),
   FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
 );
@@ -23,7 +24,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   build_id  varchar(36) NOT NULL,
   name      text        NOT NULL,
   status    text        NOT NULL,
-  plan      jsonb       NOT NULL,
+  config    jsonb       DEFAULT NULL,
+  plan      jsonb       DEFAULT NULL,
   PRIMARY KEY (id),
   FOREIGN KEY (build_id) REFERENCES builds (id) ON DELETE CASCADE
 );
@@ -33,7 +35,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   job_id    varchar(36) NOT NULL,
   name      text        NOT NULL,
   status    text        NOT NULL,
-  config    jsonb       NOT NULL,
+  config    jsonb       DEFAULT NULL,
   PRIMARY KEY (id),
   FOREIGN KEY (job_id) REFERENCES jobs (id) ON DELETE CASCADE
 );
