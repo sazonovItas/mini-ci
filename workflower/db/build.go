@@ -71,9 +71,9 @@ func (f *BuildFactory) BuildsByStatus(ctx context.Context, status status.Status)
 		return nil, err
 	}
 
-	var dbBuilds []Build
-	for _, build := range builds {
-		dbBuilds = append(dbBuilds, newBuild(build, f.queries))
+	dbBuilds := make([]Build, 0, len(builds))
+	for _, b := range builds {
+		dbBuilds = append(dbBuilds, newBuild(b, f.queries))
 	}
 
 	return dbBuilds, nil
@@ -256,9 +256,9 @@ func (b *build) Jobs(ctx context.Context) ([]Job, error) {
 		return nil, err
 	}
 
-	var dbJobs []Job
-	for _, job := range jobs {
-		dbJobs = append(dbJobs, newJob(job, b.queries))
+	dbJobs := make([]Job, 0, len(jobs))
+	for _, j := range jobs {
+		dbJobs = append(dbJobs, newJob(j, b.queries))
 	}
 
 	return dbJobs, nil

@@ -6,6 +6,8 @@ import (
 
 	"github.com/containerd/log"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sazonovItas/mini-ci/core/events"
+	"github.com/sazonovItas/mini-ci/core/events/exchange"
 	"github.com/sazonovItas/mini-ci/workflower/config"
 	"github.com/sazonovItas/mini-ci/workflower/db"
 	"github.com/sazonovItas/mini-ci/workflower/runner"
@@ -15,6 +17,9 @@ type Workflower struct {
 	workerIO  *runner.WorkerIORunner
 	apiServer *runner.HTTPServerRunner
 
+	bus events.Bus
+
+	db     *db.DB
 	pgpool *pgxpool.Pool
 
 	wg sync.WaitGroup
@@ -32,6 +37,8 @@ func New(cfg config.Config) (*Workflower, error) {
 	workflower := &Workflower{
 		apiServer: apiServer,
 		workerIO:  workerIO,
+		bus:       exchange.NewExchange(),
+		db:        db.New(pgpool),
 		pgpool:    pgpool,
 	}
 

@@ -9,7 +9,8 @@ SELECT * FROM builds
 
 -- name: BuildsByWorkflow :many
 SELECT * FROM builds
-  WHERE workflow_id = $1;
+  WHERE workflow_id = $1
+  ORDER BY created_at DESC;
 
 -- name: BuildsByStatus :many
 SELECT * FROM builds

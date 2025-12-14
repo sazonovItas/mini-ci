@@ -72,9 +72,9 @@ func (f *JobFactory) JobsByStatus(ctx context.Context, status status.Status) ([]
 		return nil, err
 	}
 
-	var dbJobs []Job
-	for _, job := range jobs {
-		dbJobs = append(dbJobs, newJob(job, f.queries))
+	dbJobs := make([]Job, 0, len(jobs))
+	for _, j := range jobs {
+		dbJobs = append(dbJobs, newJob(j, f.queries))
 	}
 
 	return dbJobs, nil
@@ -263,9 +263,9 @@ func (j *job) Tasks(ctx context.Context) ([]Task, error) {
 		return nil, err
 	}
 
-	var dbTasks []Task
-	for _, task := range tasks {
-		dbTasks = append(dbTasks, newTask(task, j.queries))
+	dbTasks := make([]Task, 0, len(tasks))
+	for _, t := range tasks {
+		dbTasks = append(dbTasks, newTask(t, j.queries))
 	}
 
 	return dbTasks, nil

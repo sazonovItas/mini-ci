@@ -79,6 +79,44 @@ type workflow struct {
 	queries *Queries
 }
 
+func (w *workflow) ID() string {
+	return w.Workflow.ID
+}
+
+func (w *workflow) Name() string {
+	return w.Workflow.Name
+}
+
+func (w *workflow) Config() model.WorkflowConfig {
+	var config model.WorkflowConfig
+	_ = json.Unmarshal(w.Workflow.Config, &config)
+	return config
+}
+
+func (w *workflow) Model() model.Workflow {
+	return model.Workflow{
+		ID:     w.ID(),
+		Name:   w.Name(),
+		Config: w.Config(),
+	}
+}
+
+func (w *workflow) Builds(ctx context.Context) ([]Build, error) {
+	queries := w.queries.Queries(ctx)
+
+	builds, err := queries.BuildsByWorkflow(ctx, w.ID())
+	if err != nil {
+		return nil, err
+	}
+
+	var dbBuilds []Build
+	for _, b := range builds {
+		dbBuilds = append(dbBuilds, newBuild(b, w.queries))
+	}
+
+	return dbBuilds, nil
+}
+
 func (w *workflow) WithTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {
 	return w.queries.WithTx(ctx, txFunc)
 }

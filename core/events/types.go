@@ -2,6 +2,10 @@ package events
 
 type EventType string
 
+func (t EventType) String() string {
+	return string(t)
+}
+
 const (
 	EventTypeContainerInitStart  EventType = "container:init:start"
 	EventTypeContainerInitFinish EventType = "container:init:finish"

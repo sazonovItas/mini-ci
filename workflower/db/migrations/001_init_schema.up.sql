@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS builds (
   status      text        NOT NULL,
   config      jsonb       DEFAULT NULL,
   plan        jsonb       DEFAULT NULL,
+  created_at  timestamp   DEFAULT NOW(),
   PRIMARY KEY (id),
   FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
 );

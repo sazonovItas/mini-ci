@@ -1,6 +1,10 @@
 package model
 
-import "github.com/sazonovItas/mini-ci/core/status"
+import (
+	"time"
+
+	"github.com/sazonovItas/mini-ci/core/status"
+)
 
 type Build struct {
 	ID         string         `json:"id"`
@@ -8,6 +12,7 @@ type Build struct {
 	Status     status.Status  `json:"status"`
 	Config     WorkflowConfig `json:"config"`
 	Plan       JobPlan        `json:"plan"`
+	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 type Job struct {

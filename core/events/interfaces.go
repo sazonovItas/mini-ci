@@ -9,3 +9,8 @@ type Publisher interface {
 type Subscriber interface {
 	Subscribe(ctx context.Context, filters ...FilterFunc) (ch <-chan Event, errs <-chan error)
 }
+
+type Bus interface {
+	Publisher
+	Subscriber
+}

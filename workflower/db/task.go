@@ -67,9 +67,9 @@ func (f *TaskFactory) TasksByStatus(ctx context.Context, status status.Status) (
 		return nil, err
 	}
 
-	var dbTasks []Task
-	for _, task := range tasks {
-		dbTasks = append(dbTasks, newTask(task, f.queries))
+	dbTasks := make([]Task, 0, len(tasks))
+	for _, t := range tasks {
+		dbTasks = append(dbTasks, newTask(t, f.queries))
 	}
 
 	return dbTasks, nil
