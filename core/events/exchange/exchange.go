@@ -105,9 +105,15 @@ func (e *Exchange) Subscribe(ctx context.Context, filters ...events.FilterFunc) 
 				}
 			}
 
-			errq <- err
+			if err != nil {
+				errq <- err
+			}
 		}
 	}()
 
 	return
+}
+
+func (e *Exchange) Close() error {
+	return e.broadcaster.Close()
 }

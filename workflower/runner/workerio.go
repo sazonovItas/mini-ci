@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"sync"
@@ -18,11 +17,19 @@ import (
 const (
 	workerEventName     = "message"
 	queueDiscardTimeout = 250 * time.Millisecond
+	requeueTimeout      = 1 * time.Second
 )
 
+type WorkerIORunnerConfig struct {
+	Address  string
+	Endpoint string
+}
+
 type WorkerIORunner struct {
+	bus events.Bus
+
 	ioServer   *socket.Server
-	httpServer *http.Server
+	httpServer *HTTPServerRunner
 
 	recvq eventq.Queue[events.Event]
 	sendq eventq.Queue[events.Event]
@@ -32,7 +39,7 @@ type WorkerIORunner struct {
 	cancel context.CancelFunc
 }
 
-func NewWorkerIORunner(address, endpoint string) *WorkerIORunner {
+func NewWorkerIORunner(bus events.Bus, cfg WorkerIORunnerConfig) *WorkerIORunner {
 	opts := socket.DefaultServerOptions()
 	opts.SetPingTimeout(20 * time.Second)
 	opts.SetPingInterval(25 * time.Second)
@@ -41,12 +48,8 @@ func NewWorkerIORunner(address, endpoint string) *WorkerIORunner {
 	ioServer := socket.NewServer(nil, opts)
 
 	handler := http.NewServeMux()
-	handler.Handle(endpoint, ioServer.ServeHandler(nil))
-	httpServer := &http.Server{
-		Addr:              address,
-		Handler:           handler,
-		ReadHeaderTimeout: 250 * time.Millisecond,
-	}
+	handler.Handle(cfg.Endpoint, ioServer.ServeHandler(nil))
+	httpServer := NewHTTPServerRunner(cfg.Address, handler)
 
 	runner := &WorkerIORunner{
 		ioServer:   ioServer,
@@ -60,7 +63,7 @@ func NewWorkerIORunner(address, endpoint string) *WorkerIORunner {
 			log.G(runner.ctx).Debug("worker connected")
 
 			worker := workers[0].(*socket.Socket)
-			workerCtx, cancel := context.WithCancel(runner.ctx)
+			workerCtx, workerCancel := context.WithCancel(runner.ctx)
 
 			_ = worker.On(workerEventName, func(msgs ...any) {
 				if len(msgs) == 0 {
@@ -84,7 +87,7 @@ func NewWorkerIORunner(address, endpoint string) *WorkerIORunner {
 
 			_ = worker.On("disconnect", func(msgs ...any) {
 				log.G(runner.ctx).Debug("worker disconnected")
-				cancel()
+				workerCancel()
 			})
 
 			runner.wg.Go(func() { runner.startSender(workerCtx, worker) })
@@ -96,13 +99,13 @@ func NewWorkerIORunner(address, endpoint string) *WorkerIORunner {
 func (r *WorkerIORunner) Start(ctx context.Context) error {
 	r.ctx, r.cancel = context.WithCancel(ctx)
 
-	r.wg.Go(func() {
-		if err := r.httpServer.ListenAndServe(); err != nil {
-			if !errors.Is(err, http.ErrServerClosed) {
-				log.G(r.ctx).WithError(err).Error("failed listen and serve http server")
-			}
-		}
-	})
+	r.wg.Go(func() { r.startReceiver(ctx) })
+
+	r.wg.Go(func() { r.startBusForwarder(ctx) })
+
+	if err := r.httpServer.Start(r.ctx); err != nil {
+		log.G(r.ctx).WithError(err).Error("failed to start worker http server")
+	}
 
 	return nil
 }
@@ -118,8 +121,8 @@ func (r *WorkerIORunner) Stop(ctx context.Context) error {
 		}
 	})
 
-	if err := r.httpServer.Shutdown(ctx); err != nil {
-		log.G(ctx).WithError(err).Error("failed to shutdown worker http server")
+	if err := r.httpServer.Stop(ctx); err != nil {
+		log.G(ctx).WithError(err).Error("failed to stop worker http server")
 	}
 
 	r.wg.Wait()
@@ -136,9 +139,63 @@ func (r *WorkerIORunner) Publish(_ context.Context, event events.Event) error {
 	return nil
 }
 
-func (r *WorkerIORunner) startSender(ctx context.Context, worker *socket.Socket) {
-	const requeueTimeout = 1 * time.Second
+func (r *WorkerIORunner) startBusForwarder(ctx context.Context) {
+	evch, errs := r.bus.Subscribe(
+		ctx,
+		events.WithEventType(
+			events.EventTypeContainerInitStart,
+			events.EventTypeScriptStart,
+			events.EventTypeContainerDestroy,
+		),
+	)
 
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case event, ok := <-evch:
+			if !ok {
+				log.G(ctx).Debug("worker io bus channel is closed")
+				return
+			}
+
+			_ = r.Publish(ctx, event)
+
+		case err := <-errs:
+			if err != nil {
+				log.G(ctx).WithError(err).Error("failed to listen on bus")
+			}
+		}
+	}
+}
+
+func (r *WorkerIORunner) startReceiver(ctx context.Context) {
+	evch, closer := r.Events()
+	defer func() {
+		_ = closer.Close()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case event, ok := <-evch:
+			if !ok {
+				log.G(ctx).Debug("worker io receiver channel is closed")
+				return
+			}
+
+			if err := r.bus.Publish(ctx, event); err != nil {
+				log.G(ctx).WithError(err).Error("failed to publish worker message to bus")
+				go requeueEventAfter(ctx, r.bus, event, requeueTimeout)
+			}
+		}
+	}
+}
+
+func (r *WorkerIORunner) startSender(ctx context.Context, worker *socket.Socket) {
 	evch, closer := r.sendq.Subscribe()
 	defer func() {
 		_ = closer.Close()
@@ -151,25 +208,27 @@ func (r *WorkerIORunner) startSender(ctx context.Context, worker *socket.Socket)
 
 		case event, ok := <-evch:
 			if !ok {
+				log.G(ctx).Debug("worker io sender channel is closed")
 				return
 			}
 
 			if err := worker.Emit(workerEventName, events.Message{Event: event}); err != nil {
 				log.G(ctx).WithError(err).Error("failed to send message to worker")
-				go r.requeueEventAfter(ctx, event, requeueTimeout)
+				go requeueEventAfter(ctx, r, event, requeueTimeout)
 			}
 		}
 	}
 }
 
-func (r *WorkerIORunner) requeueEventAfter(
+func requeueEventAfter(
 	ctx context.Context,
+	publisher events.Publisher,
 	event events.Event,
 	timeout time.Duration,
 ) {
 	select {
 	case <-ctx.Done():
 	case <-time.After(timeout):
-		r.sendq.Publish(event)
+		_ = publisher.Publish(ctx, event)
 	}
 }
