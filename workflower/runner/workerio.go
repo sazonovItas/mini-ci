@@ -145,7 +145,7 @@ func (r *WorkerIORunner) startBusForwarder(ctx context.Context) {
 		events.WithEventTypes(
 			events.EventTypeInitContainerFinish,
 			events.EventTypeScriptStart,
-			events.EventTypeScriptAbort,
+			events.EventTypeTaskAbort,
 			events.EventTypeCleanupContainer,
 		),
 	)
@@ -190,7 +190,7 @@ func (r *WorkerIORunner) startReceiver(ctx context.Context) {
 
 			if err := r.bus.Publish(ctx, event); err != nil {
 				log.G(ctx).WithError(err).Error("failed to publish worker message to bus")
-				go requeueEventAfter(ctx, r.bus, event, requeueTimeout)
+				go events.PublishAfter(ctx, r.bus, event, requeueTimeout)
 			}
 		}
 	}
@@ -215,21 +215,8 @@ func (r *WorkerIORunner) startSender(ctx context.Context, worker *socket.Socket)
 
 			if err := worker.Emit(workerEventName, events.Message{Event: event}); err != nil {
 				log.G(ctx).WithError(err).Error("failed to send message to worker")
-				go requeueEventAfter(ctx, r, event, requeueTimeout)
+				go events.PublishAfter(ctx, r, event, requeueTimeout)
 			}
 		}
-	}
-}
-
-func requeueEventAfter(
-	ctx context.Context,
-	publisher events.Publisher,
-	event events.Event,
-	timeout time.Duration,
-) {
-	select {
-	case <-ctx.Done():
-	case <-time.After(timeout):
-		_ = publisher.Publish(ctx, event)
 	}
 }

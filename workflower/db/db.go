@@ -3,10 +3,10 @@ package db
 import "github.com/jackc/pgx/v5/pgxpool"
 
 type DB struct {
-	workflow *WorkflowFactory
-	build    *BuildFactory
-	job      *JobFactory
-	task     *TaskFactory
+	workflows *WorkflowFactory
+	builds    *BuildFactory
+	jobs      *JobFactory
+	tasks     *TaskFactory
 
 	event   *EventRepository
 	taskLog *TaskLogRepository
@@ -16,29 +16,29 @@ func New(pool *pgxpool.Pool) *DB {
 	queries := NewQueries(pool)
 
 	return &DB{
-		workflow: NewWorkflowFactory(queries),
-		build:    NewBuildFactory(queries),
-		job:      NewJobFactory(queries),
-		task:     NewTaskFactory(queries),
-		event:    NewEventRepository(queries),
-		taskLog:  NewTaskLogRepository(queries),
+		workflows: NewWorkflowFactory(queries),
+		builds:    NewBuildFactory(queries),
+		jobs:      NewJobFactory(queries),
+		tasks:     NewTaskFactory(queries),
+		event:     NewEventRepository(queries),
+		taskLog:   NewTaskLogRepository(queries),
 	}
 }
 
 func (db *DB) WorkflowFactory() *WorkflowFactory {
-	return db.workflow
+	return db.workflows
 }
 
 func (db *DB) BuildFactory() *BuildFactory {
-	return db.build
+	return db.builds
 }
 
 func (db *DB) JobFactory() *JobFactory {
-	return db.job
+	return db.jobs
 }
 
 func (db *DB) TaskFactory() *TaskFactory {
-	return db.task
+	return db.tasks
 }
 
 func (db *DB) EventRepository() *EventRepository {

@@ -30,6 +30,14 @@ func (s Status) IsCreated() bool {
 	return s == StatusCreated
 }
 
+func (s Status) IsPending() bool {
+	return s == StatusPending
+}
+
+func (s Status) IsStarted() bool {
+	return s == StatusStarted
+}
+
 func (s Status) IsSkipped() bool {
 	return s == StatusSkipped
 }

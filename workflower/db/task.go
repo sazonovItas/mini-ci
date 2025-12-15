@@ -98,6 +98,8 @@ type Task interface {
 	Start(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Finish(ctx context.Context, status status.Status) error
+
+	UpdateConfig(ctx context.Context, config model.Step) error
 }
 
 type task struct {

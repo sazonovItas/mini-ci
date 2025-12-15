@@ -78,7 +78,7 @@ func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	case events.ScriptStart:
 		return p.scriptStart(ctx, event)
 
-	case events.ScriptAbort:
+	case events.TaskAbort:
 		return p.scriptAbort(ctx, event)
 
 	case events.CleanupContainer:
@@ -167,7 +167,7 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 	return nil
 }
 
-func (p *EventProcessor) scriptAbort(ctx context.Context, event events.ScriptAbort) error {
+func (p *EventProcessor) scriptAbort(ctx context.Context, event events.TaskAbort) error {
 	container, err := p.runtime.Container(ctx, event.ContainerID)
 	if err != nil {
 		if errdefs.IsNotFound(err) {

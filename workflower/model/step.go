@@ -113,7 +113,10 @@ var StepDetectors = []StepDetector{
 	},
 }
 
-type StepConfig any
+type StepConfig interface {
+	SetOutputs(*Outputs)
+	GetOutputs(*Outputs)
+}
 
 type InitOutputs struct {
 	ContainerID string `json:"containerId"`
@@ -127,9 +130,15 @@ type InitStep struct {
 	Outputs *InitOutputs `json:"outputs,omitempty"`
 }
 
+func (s *InitStep) SetOutputs(outputs *Outputs) {
+	outputs.Init = s.Outputs
+}
+
+func (s *InitStep) GetOutputs(outputs *Outputs) {}
+
 type ScriptOutputs struct {
-	ExitStatus int  `json:"exit_status"`
-	Success    bool `json:"success"`
+	ExitStatus int  `json:"exitStatus"`
+	Succeeded  bool `json:"succeeded"`
 }
 
 type ScriptStep struct {
@@ -140,7 +149,23 @@ type ScriptStep struct {
 	Outputs     *ScriptOutputs `json:"outputs,omitempty"`
 }
 
+func (s *ScriptStep) SetOutputs(outputs *Outputs) {}
+
+func (s *ScriptStep) GetOutputs(outputs *Outputs) {
+	if outputs.Init != nil {
+		s.ContainerID = outputs.Init.ContainerID
+	}
+}
+
 type CleanupStep struct {
 	Name        string `json:"cleanup"`
 	ContainerID string `json:"containerId,omitempty"`
+}
+
+func (s *CleanupStep) SetOutputs(outputs *Outputs) {}
+
+func (s *CleanupStep) GetOutputs(outputs *Outputs) {}
+
+type Outputs struct {
+	Init *InitOutputs
 }

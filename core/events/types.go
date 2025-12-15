@@ -12,12 +12,15 @@ const (
 	EventTypeCleanupContainer    EventType = "cleanup:container"
 
 	EventTypeScriptStart  EventType = "script:start"
-	EventTypeScriptAbort  EventType = "script:abort"
 	EventTypeScriptFinish EventType = "script:finish"
 
 	EventTypeBuildStatus EventType = "build:status"
 	EventTypeJobStatus   EventType = "job:status"
 	EventTypeTaskStatus  EventType = "task:status"
+
+	EventTypeBuildAbort EventType = "build:abort"
+	EventTypeJobAbort   EventType = "job:abort"
+	EventTypeTaskAbort  EventType = "task:abort"
 
 	EventTypeTaskLog EventType = "task:log"
 

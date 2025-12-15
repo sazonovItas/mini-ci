@@ -130,20 +130,8 @@ func (r *SocketIORunner) startSender(ctx context.Context, socket *socket.Socket)
 			msg := events.Message{Event: event}
 			if err := socket.Emit(r.eventName, msg); err != nil {
 				log.G(ctx).WithError(err).Errorf("failed to send event %s", event.Type())
-				go r.requeueEventAfter(ctx, event, requeueEventTimeout)
+				go events.PublishAfter(ctx, r, event, requeueEventTimeout)
 			}
 		}
-	}
-}
-
-func (r *SocketIORunner) requeueEventAfter(
-	ctx context.Context,
-	event events.Event,
-	timeout time.Duration,
-) {
-	select {
-	case <-ctx.Done():
-	case <-time.After(timeout):
-		r.sendq.Publish(event)
 	}
 }

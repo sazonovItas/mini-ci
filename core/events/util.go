@@ -1,6 +1,10 @@
 package events
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
 type ErrCannotConvertEvent struct {
 	From EventType
@@ -18,4 +22,12 @@ func ConvertTo[T Event](e Event) (T, error) {
 	}
 
 	return e.(T), nil
+}
+
+func PublishAfter(ctx context.Context, publisher Publisher, event Event, timeout time.Duration) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(timeout):
+		_ = publisher.Publish(ctx, event)
+	}
 }

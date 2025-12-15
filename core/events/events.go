@@ -13,7 +13,7 @@ func init() {
 	registerEvent[CleanupContainer]()
 	registerEvent[ScriptStart]()
 	registerEvent[ScriptFinish]()
-	registerEvent[ScriptAbort]()
+	registerEvent[TaskAbort]()
 	registerEvent[Log]()
 	registerEvent[Error]()
 	registerEvent[BuildStatus]()
@@ -109,12 +109,24 @@ type ScriptFinish struct {
 
 func (ScriptFinish) Type() EventType { return EventTypeScriptFinish }
 
-type ScriptAbort struct {
+type BuildAbort struct {
+	EventOrigin `json:",inline"`
+}
+
+func (BuildAbort) Type() EventType { return EventTypeBuildAbort }
+
+type JobAbort struct {
+	EventOrigin `json:",inline"`
+}
+
+func (JobAbort) Type() EventType { return EventTypeJobAbort }
+
+type TaskAbort struct {
 	EventOrigin `json:",inline"`
 	ContainerID string `json:"containerId"`
 }
 
-func (ScriptAbort) Type() EventType { return EventTypeScriptAbort }
+func (TaskAbort) Type() EventType { return EventTypeTaskAbort }
 
 type LogMessage struct {
 	Msg  string    `json:"msg"`
