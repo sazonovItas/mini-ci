@@ -231,10 +231,6 @@ func (j *job) Finish(ctx context.Context, status status.Status) error {
 		}
 		j.Job = lockedJob
 
-		if !j.IsRunning() {
-			return ErrIsNotRunning
-		}
-
 		if j.IsFinished() {
 			return ErrAlreadyFinished
 		}

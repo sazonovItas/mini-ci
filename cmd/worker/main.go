@@ -25,6 +25,7 @@ func main() {
 	err := configutil.Load(
 		&cfg,
 		config.DefaultConfig,
+		configutil.WithConfigType("yaml"),
 		configutil.WithEnvs(envPrefix),
 	)
 	if err != nil {

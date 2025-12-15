@@ -21,6 +21,12 @@ func (of optionFunc) Apply(cfg *enviper.Enviper) {
 	of(cfg)
 }
 
+func WithConfigType(t string) optionFunc {
+	return func(cfg *enviper.Enviper) {
+		cfg.SetConfigType(t)
+	}
+}
+
 func WithEnvs(envPrefix string) optionFunc {
 	return func(cfg *enviper.Enviper) {
 		cfg.SetEnvPrefix(envPrefix)

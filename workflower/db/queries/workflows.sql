@@ -14,3 +14,10 @@ SELECT * FROM workflows
 INSERT INTO workflows (id, name, config) 
   VALUES ($1, $2, $3)
   RETURNING *;
+
+-- name: UpdateWorkflow :one
+UPDATE workflows
+  SET name = $2,
+    config = $3
+  WHERE id = $1
+  RETURNING *;

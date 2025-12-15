@@ -8,18 +8,20 @@ import (
 )
 
 func init() {
-	RegisterEvent[ContainerInitStart]()
-	RegisterEvent[ContainerInitFinish]()
-	RegisterEvent[ScriptStart]()
-	RegisterEvent[ScriptFinish]()
-	RegisterEvent[Log]()
-	RegisterEvent[Error]()
-	RegisterEvent[BuildStatus]()
-	RegisterEvent[JobStatus]()
-	RegisterEvent[TaskStatus]()
+	registerEvent[InitContainerStart]()
+	registerEvent[InitContainerFinish]()
+	registerEvent[CleanupContainer]()
+	registerEvent[ScriptStart]()
+	registerEvent[ScriptFinish]()
+	registerEvent[ScriptAbort]()
+	registerEvent[Log]()
+	registerEvent[Error]()
+	registerEvent[BuildStatus]()
+	registerEvent[JobStatus]()
+	registerEvent[TaskStatus]()
 }
 
-func RegisterEvent[T Event]() {
+func registerEvent[T Event]() {
 	var e T
 	if _, found := events[e.Type()]; !found {
 		events[e.Type()] = unmarshaler[T]()
@@ -65,26 +67,26 @@ type ContainerConfig struct {
 	Env   []string `json:"env,omitempty"`
 }
 
-type ContainerInitStart struct {
+type InitContainerStart struct {
 	EventOrigin `json:",inline"`
 	Config      ContainerConfig `json:"config"`
 }
 
-func (ContainerInitStart) Type() EventType { return EventTypeContainerInitStart }
+func (InitContainerStart) Type() EventType { return EventTypeInitContainerStart }
 
-type ContainerInitFinish struct {
+type InitContainerFinish struct {
 	EventOrigin `json:",inline"`
 	ContainerID string `json:"containerId"`
 }
 
-func (ContainerInitFinish) Type() EventType { return EventTypeContainerInitFinish }
+func (InitContainerFinish) Type() EventType { return EventTypeInitContainerFinish }
 
-type ContainerDestoy struct {
+type CleanupContainer struct {
 	EventOrigin `json:",inline"`
 	ContainerID string `json:"containerId"`
 }
 
-func (ContainerDestoy) Type() EventType { return EventTypeContainerDestroy }
+func (CleanupContainer) Type() EventType { return EventTypeCleanupContainer }
 
 type ScriptConfig struct {
 	ContainerID string   `json:"containerId"`
@@ -106,6 +108,13 @@ type ScriptFinish struct {
 }
 
 func (ScriptFinish) Type() EventType { return EventTypeScriptFinish }
+
+type ScriptAbort struct {
+	EventOrigin `json:",inline"`
+	ContainerID string `json:"containerId"`
+}
+
+func (ScriptAbort) Type() EventType { return EventTypeScriptAbort }
 
 type LogMessage struct {
 	Msg  string    `json:"msg"`

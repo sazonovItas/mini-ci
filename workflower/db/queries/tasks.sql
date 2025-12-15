@@ -37,3 +37,9 @@ UPDATE tasks
   SET status = $2
   WHERE id = $1
   RETURNING *;
+
+-- name: UpdateTaskConfig :one
+UPDATE tasks
+  SET config = $2
+  WHERE id = $1
+  RETURNING *;

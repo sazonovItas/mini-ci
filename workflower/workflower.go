@@ -16,9 +16,9 @@ type Workflower struct {
 	workerIO  *runner.WorkerIORunner
 	apiServer *runner.APIServerRunner
 
-	db  *pgdb.DB
-	bus *exchange.Exchange
+	db *pgdb.DB
 
+	bus    *exchange.Exchange
 	pgpool *pgxpool.Pool
 
 	wg sync.WaitGroup

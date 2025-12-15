@@ -224,10 +224,6 @@ func (b *build) Finish(ctx context.Context, status status.Status) error {
 		}
 		b.Build = lockedBuild
 
-		if !b.IsRunning() {
-			return ErrIsNotRunning
-		}
-
 		if b.IsFinished() {
 			return ErrAlreadyFinished
 		}

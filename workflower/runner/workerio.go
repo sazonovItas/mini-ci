@@ -142,10 +142,11 @@ func (r *WorkerIORunner) Publish(_ context.Context, event events.Event) error {
 func (r *WorkerIORunner) startBusForwarder(ctx context.Context) {
 	evch, errs := r.bus.Subscribe(
 		ctx,
-		events.WithEventType(
-			events.EventTypeContainerInitStart,
+		events.WithEventTypes(
+			events.EventTypeInitContainerFinish,
 			events.EventTypeScriptStart,
-			events.EventTypeContainerDestroy,
+			events.EventTypeScriptAbort,
+			events.EventTypeCleanupContainer,
 		),
 	)
 

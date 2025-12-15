@@ -28,6 +28,27 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 	return i, err
 }
 
+const updateWorkflow = `-- name: UpdateWorkflow :one
+UPDATE workflows
+  SET name = $2,
+    config = $3
+  WHERE id = $1
+  RETURNING id, name, config
+`
+
+type UpdateWorkflowParams struct {
+	ID     string
+	Name   string
+	Config []byte
+}
+
+func (q *Queries) UpdateWorkflow(ctx context.Context, arg UpdateWorkflowParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, updateWorkflow, arg.ID, arg.Name, arg.Config)
+	var i Workflow
+	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	return i, err
+}
+
 const workflow = `-- name: Workflow :one
 SELECT id, name, config FROM workflows
   WHERE id = $1 LIMIT 1

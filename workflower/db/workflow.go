@@ -101,6 +101,31 @@ func (w *workflow) Model() model.Workflow {
 	}
 }
 
+func (w *workflow) Update(ctx context.Context, workflow model.Workflow) error {
+	queries := w.queries.Queries(ctx)
+
+	config, err := json.Marshal(workflow.Config)
+	if err != nil {
+		return err
+	}
+
+	updatedWorkflow, err := queries.UpdateWorkflow(
+		ctx,
+		psql.UpdateWorkflowParams{
+			ID:     w.ID(),
+			Name:   workflow.Name,
+			Config: config,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	w.Workflow = updatedWorkflow
+
+	return err
+}
+
 func (w *workflow) Builds(ctx context.Context) ([]Build, error) {
 	queries := w.queries.Queries(ctx)
 

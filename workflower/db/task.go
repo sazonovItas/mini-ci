@@ -216,10 +216,6 @@ func (t *task) Finish(ctx context.Context, status status.Status) error {
 		}
 		t.Task = lockedTask
 
-		if !t.IsRunning() {
-			return ErrIsNotRunning
-		}
-
 		if t.IsFinished() {
 			return ErrAlreadyFinished
 		}
@@ -238,6 +234,30 @@ func (t *task) Finish(ctx context.Context, status status.Status) error {
 
 		return nil
 	})
+}
+
+func (t *task) UpdateConfig(ctx context.Context, cfg model.Step) error {
+	queries := t.queries.Queries(ctx)
+
+	config, err := json.Marshal(cfg)
+	if err != nil {
+		return nil
+	}
+
+	updatedTask, err := queries.UpdateTaskConfig(
+		ctx,
+		psql.UpdateTaskConfigParams{
+			ID:     t.ID(),
+			Config: config,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	t.Task = updatedTask
+
+	return nil
 }
 
 func (t *task) WithTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {

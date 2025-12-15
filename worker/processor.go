@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
 	runtimespec "github.com/sazonovItas/mini-ci/worker/runtime"
@@ -65,26 +66,22 @@ func (p *EventProcessor) Process(ctx context.Context, evch <-chan events.Event) 
 	}
 }
 
-func (p *EventProcessor) Wait() chan struct{} {
-	waitch := make(chan struct{})
-
-	go func() {
-		defer close(waitch)
-		p.wg.Wait()
-	}()
-
-	return waitch
+func (p *EventProcessor) Wait() {
+	p.wg.Wait()
 }
 
 func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	switch event := ev.(type) {
-	case events.ContainerInitStart:
+	case events.InitContainerStart:
 		return p.containerInitStart(ctx, event)
 
 	case events.ScriptStart:
 		return p.scriptStart(ctx, event)
 
-	case events.ContainerDestoy:
+	case events.ScriptAbort:
+		return p.scriptAbort(ctx, event)
+
+	case events.CleanupContainer:
 		return p.containerDestroy(ctx, event)
 
 	default:
@@ -94,7 +91,7 @@ func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	return nil
 }
 
-func (p *EventProcessor) containerInitStart(ctx context.Context, event events.ContainerInitStart) error {
+func (p *EventProcessor) containerInitStart(ctx context.Context, event events.InitContainerStart) error {
 	evLogger := p.loggerFactory.New(event.Origin())
 
 	if err := p.runtime.Pull(ctx, event.Config.Image); err != nil {
@@ -118,7 +115,7 @@ func (p *EventProcessor) containerInitStart(ctx context.Context, event events.Co
 
 	evLogger.Log(fmt.Sprintf("created container %s", container.ShortID()))
 
-	finishInitContainer := events.ContainerInitFinish{
+	finishInitContainer := events.InitContainerFinish{
 		EventOrigin: event.Origin(),
 		ContainerID: container.ID(),
 	}
@@ -170,7 +167,24 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 	return nil
 }
 
-func (p *EventProcessor) containerDestroy(ctx context.Context, event events.ContainerDestoy) error {
+func (p *EventProcessor) scriptAbort(ctx context.Context, event events.ScriptAbort) error {
+	container, err := p.runtime.Container(ctx, event.ContainerID)
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil
+		}
+
+		return err
+	}
+
+	if err := container.Stop(ctx, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *EventProcessor) containerDestroy(ctx context.Context, event events.CleanupContainer) error {
 	if err := p.runtime.Destroy(ctx, event.ContainerID); err != nil {
 		log.G(ctx).WithError(err).Errorf("failed to destroy container %s", event.ContainerID)
 	}

@@ -43,7 +43,7 @@ func TestMessageParsing(t *testing.T) {
 		{
 			name: "ContainerInitStart event",
 			args: args{
-				Event: ContainerInitStart{
+				Event: InitContainerStart{
 					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					Config: ContainerConfig{
 						Image: "test",
@@ -56,7 +56,7 @@ func TestMessageParsing(t *testing.T) {
 		{
 			name: "ContainerInitFinish event",
 			args: args{
-				Event: ContainerInitFinish{
+				Event: InitContainerFinish{
 					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					ContainerID: "test",
 				},

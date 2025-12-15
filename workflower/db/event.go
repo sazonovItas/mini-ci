@@ -61,14 +61,14 @@ func (r *EventRepository) Events(ctx context.Context, originID string) ([]events
 	return out, nil
 }
 
-func (r *EventRepository) EventsByType(ctx context.Context, originID string, eventType string) ([]events.Event, error) {
+func (r *EventRepository) EventsByType(ctx context.Context, originID string, eventType events.EventType) ([]events.Event, error) {
 	queries := r.queries.Queries(ctx)
 
 	dbEvents, err := queries.EventsByType(
 		ctx,
 		psql.EventsByTypeParams{
 			OriginID:  originID,
-			EventType: eventType,
+			EventType: eventType.String(),
 		},
 	)
 	if err != nil {

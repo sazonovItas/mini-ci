@@ -238,6 +238,31 @@ func (q *Queries) TasksByStatus(ctx context.Context, status string) ([]Task, err
 	return items, nil
 }
 
+const updateTaskConfig = `-- name: UpdateTaskConfig :one
+UPDATE tasks
+  SET config = $2
+  WHERE id = $1
+  RETURNING id, job_id, name, status, config
+`
+
+type UpdateTaskConfigParams struct {
+	ID     string
+	Config []byte
+}
+
+func (q *Queries) UpdateTaskConfig(ctx context.Context, arg UpdateTaskConfigParams) (Task, error) {
+	row := q.db.QueryRow(ctx, updateTaskConfig, arg.ID, arg.Config)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.Name,
+		&i.Status,
+		&i.Config,
+	)
+	return i, err
+}
+
 const updateTaskStatus = `-- name: UpdateTaskStatus :one
 UPDATE tasks
   SET status = $2

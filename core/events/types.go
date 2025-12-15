@@ -7,11 +7,12 @@ func (t EventType) String() string {
 }
 
 const (
-	EventTypeContainerInitStart  EventType = "container:init:start"
-	EventTypeContainerInitFinish EventType = "container:init:finish"
-	EventTypeContainerDestroy    EventType = "container:destroy"
+	EventTypeInitContainerStart  EventType = "init:container:start"
+	EventTypeInitContainerFinish EventType = "init:container:finish"
+	EventTypeCleanupContainer    EventType = "cleanup:container"
 
 	EventTypeScriptStart  EventType = "script:start"
+	EventTypeScriptAbort  EventType = "script:abort"
 	EventTypeScriptFinish EventType = "script:finish"
 
 	EventTypeBuildStatus EventType = "build:status"
