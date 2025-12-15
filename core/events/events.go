@@ -14,7 +14,7 @@ func init() {
 	registerEvent[ScriptStart]()
 	registerEvent[ScriptFinish]()
 	registerEvent[TaskAbort]()
-	registerEvent[Log]()
+	registerEvent[TaskLog]()
 	registerEvent[Error]()
 	registerEvent[BuildStatus]()
 	registerEvent[JobStatus]()
@@ -133,12 +133,12 @@ type LogMessage struct {
 	Time time.Time `json:"time"`
 }
 
-type Log struct {
+type TaskLog struct {
 	EventOrigin `json:",inline"`
 	Messages    []LogMessage `json:"messages"`
 }
 
-func (Log) Type() EventType { return EventTypeTaskLog }
+func (TaskLog) Type() EventType { return EventTypeTaskLog }
 
 type Error struct {
 	EventOrigin `json:",inline"`

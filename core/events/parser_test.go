@@ -34,7 +34,7 @@ func TestMessageParsing(t *testing.T) {
 		{
 			name: "Log event",
 			args: args{
-				Event: Log{
+				Event: TaskLog{
 					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
 					Messages:    []LogMessage{{Msg: "log", Time: time.Now().UTC()}},
 				},

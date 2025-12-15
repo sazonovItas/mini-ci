@@ -10,24 +10,24 @@ import (
 	"github.com/containerd/log"
 )
 
-type HTTPServerRunner struct {
+type HTTPServer struct {
 	server *http.Server
 	wg     sync.WaitGroup
 }
 
-func NewHTTPServerRunner(address string, handler http.Handler) *HTTPServerRunner {
+func NewHTTPServer(address string, handler http.Handler) *HTTPServer {
 	server := &http.Server{
 		Addr:              address,
 		Handler:           handler,
 		ReadHeaderTimeout: 250 * time.Millisecond,
 	}
 
-	return &HTTPServerRunner{
+	return &HTTPServer{
 		server: server,
 	}
 }
 
-func (r *HTTPServerRunner) Start(ctx context.Context) error {
+func (r *HTTPServer) Start(ctx context.Context) error {
 	r.wg.Go(func() {
 		if err := r.server.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
@@ -39,7 +39,7 @@ func (r *HTTPServerRunner) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *HTTPServerRunner) Stop(ctx context.Context) error {
+func (r *HTTPServer) Stop(ctx context.Context) error {
 	if err := r.server.Shutdown(ctx); err != nil {
 		log.G(ctx).WithError(err).Error("failed to shutdown http server")
 	}

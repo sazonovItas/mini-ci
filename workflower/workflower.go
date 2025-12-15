@@ -13,8 +13,8 @@ import (
 )
 
 type Workflower struct {
-	workerIO  *runner.WorkerIORunner
-	apiServer *runner.APIServerRunner
+	workerIO  *runner.WorkerIO
+	apiServer *runner.APIServer
 
 	db *pgdb.DB
 
@@ -33,17 +33,17 @@ func New(cfg config.Config) (*Workflower, error) {
 	db := pgdb.New(pgpool)
 	bus := exchange.NewExchange()
 
-	workerIO := runner.NewWorkerIORunner(
+	workerIO := runner.NewWorkerIO(
 		bus,
-		runner.WorkerIORunnerConfig{
+		runner.WorkerIOConfig{
 			Address:  cfg.WorkerIO.Addresss,
 			Endpoint: cfg.WorkerIO.Endpoint,
 		},
 	)
 
-	apiServer := runner.NewAPIServerRunner(
+	apiServer := runner.NewAPIServer(
 		bus,
-		runner.APIServerRunnerConfig{
+		runner.APIServerConfig{
 			Address: cfg.API.Address,
 		},
 	)

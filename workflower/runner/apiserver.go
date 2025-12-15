@@ -7,30 +7,30 @@ import (
 	"github.com/sazonovItas/mini-ci/core/events"
 )
 
-type APIServerRunnerConfig struct {
+type APIServerConfig struct {
 	Address string
 }
 
-type APIServerRunner struct {
+type APIServer struct {
 	bus events.Bus
 
-	httpServer *HTTPServerRunner
+	httpServer *HTTPServer
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func NewAPIServerRunner(bus events.Bus, cfg APIServerRunnerConfig) *APIServerRunner {
+func NewAPIServer(bus events.Bus, cfg APIServerConfig) *APIServer {
 	// TODO: add handler for api server
-	httpServer := NewHTTPServerRunner(cfg.Address, nil)
+	httpServer := NewHTTPServer(cfg.Address, nil)
 
-	return &APIServerRunner{
+	return &APIServer{
 		bus:        bus,
 		httpServer: httpServer,
 	}
 }
 
-func (r *APIServerRunner) Start(parentCtx context.Context) error {
+func (r *APIServer) Start(parentCtx context.Context) error {
 	r.ctx, r.cancel = context.WithCancel(parentCtx)
 
 	if err := r.httpServer.Start(r.ctx); err != nil {
@@ -40,7 +40,7 @@ func (r *APIServerRunner) Start(parentCtx context.Context) error {
 	return nil
 }
 
-func (r *APIServerRunner) Stop(ctx context.Context) error {
+func (r *APIServer) Stop(ctx context.Context) error {
 	r.cancel()
 
 	if err := r.httpServer.Stop(ctx); err != nil {

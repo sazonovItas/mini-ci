@@ -91,7 +91,7 @@ func (l *eventLogger) sendMessages(messages []events.LogMessage) {
 
 	_ = l.publisher.Publish(
 		context.TODO(),
-		events.Log{EventOrigin: l.origin, Messages: messages},
+		events.TaskLog{EventOrigin: l.origin, Messages: messages},
 	)
 }
 

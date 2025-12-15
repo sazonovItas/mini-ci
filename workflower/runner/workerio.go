@@ -20,16 +20,16 @@ const (
 	requeueTimeout      = 1 * time.Second
 )
 
-type WorkerIORunnerConfig struct {
+type WorkerIOConfig struct {
 	Address  string
 	Endpoint string
 }
 
-type WorkerIORunner struct {
+type WorkerIO struct {
 	bus events.Bus
 
 	ioServer   *socket.Server
-	httpServer *HTTPServerRunner
+	httpServer *HTTPServer
 
 	recvq eventq.Queue[events.Event]
 	sendq eventq.Queue[events.Event]
@@ -39,7 +39,7 @@ type WorkerIORunner struct {
 	cancel context.CancelFunc
 }
 
-func NewWorkerIORunner(bus events.Bus, cfg WorkerIORunnerConfig) *WorkerIORunner {
+func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 	opts := socket.DefaultServerOptions()
 	opts.SetPingTimeout(20 * time.Second)
 	opts.SetPingInterval(25 * time.Second)
@@ -49,9 +49,9 @@ func NewWorkerIORunner(bus events.Bus, cfg WorkerIORunnerConfig) *WorkerIORunner
 
 	handler := http.NewServeMux()
 	handler.Handle(cfg.Endpoint, ioServer.ServeHandler(nil))
-	httpServer := NewHTTPServerRunner(cfg.Address, handler)
+	httpServer := NewHTTPServer(cfg.Address, handler)
 
-	runner := &WorkerIORunner{
+	runner := &WorkerIO{
 		ioServer:   ioServer,
 		httpServer: httpServer,
 		recvq:      eventq.New(queueDiscardTimeout, func(events.Event) {}),
@@ -96,7 +96,7 @@ func NewWorkerIORunner(bus events.Bus, cfg WorkerIORunnerConfig) *WorkerIORunner
 	return runner
 }
 
-func (r *WorkerIORunner) Start(ctx context.Context) error {
+func (r *WorkerIO) Start(ctx context.Context) error {
 	r.ctx, r.cancel = context.WithCancel(ctx)
 
 	r.wg.Go(func() { r.startReceiver(ctx) })
@@ -110,7 +110,7 @@ func (r *WorkerIORunner) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *WorkerIORunner) Stop(ctx context.Context) error {
+func (r *WorkerIO) Stop(ctx context.Context) error {
 	r.cancel()
 	r.sendq.Shutdown()
 	r.recvq.Shutdown()
@@ -130,16 +130,16 @@ func (r *WorkerIORunner) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (r *WorkerIORunner) Events() (<-chan events.Event, io.Closer) {
+func (r *WorkerIO) Events() (<-chan events.Event, io.Closer) {
 	return r.recvq.Subscribe()
 }
 
-func (r *WorkerIORunner) Publish(_ context.Context, event events.Event) error {
+func (r *WorkerIO) Publish(_ context.Context, event events.Event) error {
 	r.sendq.Publish(event)
 	return nil
 }
 
-func (r *WorkerIORunner) startBusForwarder(ctx context.Context) {
+func (r *WorkerIO) startBusForwarder(ctx context.Context) {
 	evch, errs := r.bus.Subscribe(
 		ctx,
 		events.WithEventTypes(
@@ -171,7 +171,7 @@ func (r *WorkerIORunner) startBusForwarder(ctx context.Context) {
 	}
 }
 
-func (r *WorkerIORunner) startReceiver(ctx context.Context) {
+func (r *WorkerIO) startReceiver(ctx context.Context) {
 	evch, closer := r.Events()
 	defer func() {
 		_ = closer.Close()
@@ -196,7 +196,7 @@ func (r *WorkerIORunner) startReceiver(ctx context.Context) {
 	}
 }
 
-func (r *WorkerIORunner) startSender(ctx context.Context, worker *socket.Socket) {
+func (r *WorkerIO) startSender(ctx context.Context, worker *socket.Socket) {
 	evch, closer := r.sendq.Subscribe()
 	defer func() {
 		_ = closer.Close()
