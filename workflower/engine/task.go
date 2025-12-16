@@ -2,8 +2,6 @@ package engine
 
 import (
 	"context"
-	"sync"
-	"time"
 
 	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
@@ -12,93 +10,57 @@ import (
 	"github.com/sazonovItas/mini-ci/workflower/model"
 )
 
-type TaskWatcher struct {
-	bus   events.Bus
-	tasks *db.TaskFactory
-
-	wg sync.WaitGroup
-
-	ctx    context.Context
-	cancel context.CancelFunc
+type TaskProcessor struct {
+	tasks     *db.TaskFactory
+	publisher events.Publisher
 }
 
-func NewTaskWatcher(bus events.Bus, tasks *db.TaskFactory) *TaskWatcher {
-	return &TaskWatcher{
-		bus:   bus,
-		tasks: tasks,
-	}
+func NewTaskProcessor(
+	tasks *db.TaskFactory,
+	publisher events.Publisher,
+) TaskProcessor {
+	return TaskProcessor{tasks: tasks, publisher: publisher}
 }
 
-func (w *TaskWatcher) Start(ctx context.Context) {
-	w.ctx, w.cancel = context.WithCancel(ctx)
-
-	w.wg.Go(func() { w.watchEvents(ctx) })
-}
-
-func (w *TaskWatcher) Stop(ctx context.Context) {
-	w.cancel()
-
-	w.wg.Wait()
-}
-
-func (w *TaskWatcher) watchEvents(ctx context.Context) {
-	evch, errch := w.bus.Subscribe(
-		ctx,
+func (p TaskProcessor) Filters() []events.FilterFunc {
+	return []events.FilterFunc{
 		events.WithEventTypes(
 			events.EventTypeTaskStatus,
 			events.EventTypeInitContainerFinish,
 			events.EventTypeScriptFinish,
 			events.EventTypeError,
 		),
-	)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case event, ok := <-evch:
-			if !ok {
-				return
-			}
-
-			err := w.processEvent(ctx, event)
-			if err != nil {
-				log.G(ctx).WithError(err).Error("task watcher: failed to process event")
-			}
-
-		case err := <-errch:
-			if err != nil {
-				log.G(ctx).WithError(err).Error("task watcher: failed to read events from bus")
-			}
-		}
 	}
 }
 
-func (w *TaskWatcher) processEvent(ctx context.Context, ev events.Event) (err error) {
-	switch event := ev.(type) {
+func (p TaskProcessor) ProcessEvent(ctx context.Context, event events.Event) (err error) {
+	switch e := event.(type) {
+	case events.TaskStatus:
+		err = p.pendingStatus(ctx, e)
+
 	case events.InitContainerFinish:
-		err = w.initContainerFinish(ctx, event)
+		err = p.initContainerFinish(ctx, e)
 
 	case events.ScriptFinish:
-		err = w.scriptFinish(ctx, event)
+		err = p.scriptFinish(ctx, e)
 
 	case events.Error:
-		err = w.error(ctx, event)
-
-	case events.TaskStatus:
-		err = w.pendingStatus(ctx, event)
+		err = p.error(ctx, e)
 
 	default:
-		log.G(ctx).Errorf("task watcher: unknown event type %T to process", event)
+		log.G(ctx).Errorf("task processor: unknown event type %T to process", e)
+	}
+
+	if err != nil {
+		log.G(ctx).WithError(err).Errorf("task processor: failed to process event %T", event)
 	}
 
 	return err
 }
 
-func (w *TaskWatcher) initContainerFinish(ctx context.Context, event events.InitContainerFinish) error {
-	return w.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := w.tasks.Task(txCtx, event.Origin().ID)
+func (p *TaskProcessor) initContainerFinish(ctx context.Context, event events.InitContainerFinish) error {
+	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
+		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
@@ -107,7 +69,12 @@ func (w *TaskWatcher) initContainerFinish(ctx context.Context, event events.Init
 			return nil
 		}
 
-		config := task.Config().Config.(model.InitStep)
+		err = task.Lock(txCtx)
+		if err != nil {
+			return err
+		}
+
+		config := task.Config().Config.(*model.InitStep)
 		config.Outputs = &model.InitOutputs{ContainerID: event.ContainerID}
 
 		err = task.UpdateConfig(ctx, model.Step{Config: config})
@@ -122,7 +89,7 @@ func (w *TaskWatcher) initContainerFinish(ctx context.Context, event events.Init
 			return err
 		}
 
-		err = w.publishStatusChanged(txCtx, task.Model())
+		err = p.publishStatusChanged(txCtx, task.Model())
 		if err != nil {
 			return err
 		}
@@ -131,9 +98,9 @@ func (w *TaskWatcher) initContainerFinish(ctx context.Context, event events.Init
 	})
 }
 
-func (w *TaskWatcher) scriptFinish(ctx context.Context, event events.ScriptFinish) error {
-	return w.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := w.tasks.Task(txCtx, event.Origin().ID)
+func (p *TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFinish) error {
+	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
+		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
@@ -142,7 +109,12 @@ func (w *TaskWatcher) scriptFinish(ctx context.Context, event events.ScriptFinis
 			return nil
 		}
 
-		config := task.Config().Config.(model.ScriptStep)
+		err = task.Lock(txCtx)
+		if err != nil {
+			return err
+		}
+
+		config := task.Config().Config.(*model.ScriptStep)
 		config.Outputs = &model.ScriptOutputs{ExitStatus: event.ExitStatus, Succeeded: event.Succeeded}
 
 		err = task.UpdateConfig(ctx, model.Step{Config: config})
@@ -160,7 +132,7 @@ func (w *TaskWatcher) scriptFinish(ctx context.Context, event events.ScriptFinis
 			return err
 		}
 
-		err = w.publishStatusChanged(txCtx, task.Model())
+		err = p.publishStatusChanged(txCtx, task.Model())
 		if err != nil {
 			return err
 		}
@@ -169,15 +141,20 @@ func (w *TaskWatcher) scriptFinish(ctx context.Context, event events.ScriptFinis
 	})
 }
 
-func (w *TaskWatcher) error(ctx context.Context, event events.Error) error {
-	return w.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := w.tasks.Task(txCtx, event.Origin().ID)
+func (p *TaskProcessor) error(ctx context.Context, event events.Error) error {
+	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
+		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
 
 		if !found {
 			return nil
+		}
+
+		err = task.Lock(txCtx)
+		if err != nil {
+			return err
 		}
 
 		err = task.Finish(txCtx, status.StatusErrored)
@@ -185,7 +162,7 @@ func (w *TaskWatcher) error(ctx context.Context, event events.Error) error {
 			return err
 		}
 
-		err = w.publishStatusChanged(txCtx, task.Model())
+		err = p.publishStatusChanged(txCtx, task.Model())
 		if err != nil {
 			return err
 		}
@@ -194,13 +171,13 @@ func (w *TaskWatcher) error(ctx context.Context, event events.Error) error {
 	})
 }
 
-func (w *TaskWatcher) pendingStatus(ctx context.Context, event events.TaskStatus) error {
+func (p *TaskProcessor) pendingStatus(ctx context.Context, event events.TaskStatus) error {
 	if !event.Status.IsPending() {
 		return nil
 	}
 
-	return w.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := w.tasks.Task(txCtx, event.Origin().ID)
+	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
+		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
@@ -209,7 +186,12 @@ func (w *TaskWatcher) pendingStatus(ctx context.Context, event events.TaskStatus
 			return nil
 		}
 
-		nextStatus, event := w.startTask(ctx, task.Model())
+		err = task.Lock(txCtx)
+		if err != nil {
+			return err
+		}
+
+		nextStatus, event := p.startTask(ctx, task.Model())
 
 		if nextStatus.IsFinished() {
 			err = task.Finish(txCtx, nextStatus)
@@ -223,11 +205,11 @@ func (w *TaskWatcher) pendingStatus(ctx context.Context, event events.TaskStatus
 			}
 		}
 
-		if err := w.bus.Publish(ctx, event); err != nil {
+		if err := p.Publish(ctx, event); err != nil {
 			return err
 		}
 
-		if err := w.publishStatusChanged(ctx, task.Model()); err != nil {
+		if err := p.publishStatusChanged(ctx, task.Model()); err != nil {
 			return err
 		}
 
@@ -235,7 +217,7 @@ func (w *TaskWatcher) pendingStatus(ctx context.Context, event events.TaskStatus
 	})
 }
 
-func (w *TaskWatcher) startTask(ctx context.Context, task model.Task) (status.Status, events.Event) {
+func (p *TaskProcessor) startTask(ctx context.Context, task model.Task) (status.Status, events.Event) {
 	var (
 		origin     = events.NewEventOrigin(task.ID)
 		nextStatus = status.StatusStarted
@@ -243,7 +225,7 @@ func (w *TaskWatcher) startTask(ctx context.Context, task model.Task) (status.St
 	)
 
 	switch step := task.Config.Config.(type) {
-	case model.InitStep:
+	case *model.InitStep:
 		event = events.InitContainerStart{
 			EventOrigin: origin,
 			Config: events.ContainerConfig{
@@ -253,7 +235,7 @@ func (w *TaskWatcher) startTask(ctx context.Context, task model.Task) (status.St
 			},
 		}
 
-	case model.ScriptStep:
+	case *model.ScriptStep:
 		event = events.ScriptStart{
 			EventOrigin: origin,
 			Config: events.ScriptConfig{
@@ -263,7 +245,7 @@ func (w *TaskWatcher) startTask(ctx context.Context, task model.Task) (status.St
 			},
 		}
 
-	case model.CleanupStep:
+	case *model.CleanupStep:
 		event = events.CleanupContainer{
 			EventOrigin: origin,
 			ContainerID: step.ContainerID,
@@ -278,17 +260,18 @@ func (w *TaskWatcher) startTask(ctx context.Context, task model.Task) (status.St
 	return nextStatus, event
 }
 
-func (w *TaskWatcher) publishStatusChanged(ctx context.Context, task model.Task) error {
+func (p *TaskProcessor) publishStatusChanged(ctx context.Context, task model.Task) error {
 	event := events.TaskStatus{
 		ChangeStatus: events.ChangeStatus{
-			EventOrigin: events.EventOrigin{
-				ID:        task.ID,
-				OccuredAt: time.Now().UTC(),
-			},
-			Status: task.Status,
+			EventOrigin: events.NewEventOrigin(task.ID),
+			Status:      task.Status,
 		},
 		JobID: task.JobID,
 	}
 
-	return w.bus.Publish(ctx, event)
+	return p.Publish(ctx, event)
+}
+
+func (p *TaskProcessor) Publish(ctx context.Context, event events.Event) error {
+	return p.publisher.Publish(ctx, event)
 }

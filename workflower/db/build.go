@@ -97,8 +97,9 @@ type Build interface {
 	Plan() model.JobPlan
 	Model() model.Build
 
-	SetPending(ctx context.Context) error
+	Lock(ctx context.Context) error
 
+	Pending(ctx context.Context) error
 	Start(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Finish(ctx context.Context, status status.Status) error
@@ -146,102 +147,89 @@ func (b *build) Model() model.Build {
 	}
 }
 
-func (b *build) SetPending(ctx context.Context) error {
-	return b.WithTx(ctx, func(txCtx context.Context) error {
-		queries := b.queries.Queries(txCtx)
+func (b *build) Lock(ctx context.Context) error {
+	queries := b.queries.Queries(ctx)
 
-		lockedBuild, err := queries.LockBuild(txCtx, b.ID())
-		if err != nil {
-			return err
-		}
-		b.Build = lockedBuild
+	lockedBuild, err := queries.LockBuild(ctx, b.ID())
+	if err != nil {
+		return err
+	}
 
-		if b.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	b.Build = lockedBuild
 
-		updatedBuild, err := queries.UpdateBuildStatus(
-			txCtx,
-			psql.UpdateBuildStatusParams{
-				ID:     b.ID(),
-				Status: status.StatusPending.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		b.Build = updatedBuild
+	return nil
+}
 
-		return nil
-	})
+func (b *build) Pending(ctx context.Context) error {
+	queries := b.queries.Queries(ctx)
+
+	if b.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedBuild, err := queries.UpdateBuildStatus(
+		ctx,
+		psql.UpdateBuildStatusParams{
+			ID:     b.ID(),
+			Status: status.StatusPending.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	b.Build = updatedBuild
+
+	return nil
 }
 
 func (b *build) Start(ctx context.Context) error {
-	return b.WithTx(ctx, func(txCtx context.Context) error {
-		queries := b.queries.Queries(txCtx)
+	queries := b.queries.Queries(ctx)
 
-		lockedBuild, err := queries.LockBuild(txCtx, b.ID())
-		if err != nil {
-			return err
-		}
-		b.Build = lockedBuild
+	if b.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
 
-		if b.IsRunning() {
-			return ErrAlreadyRunning
-		}
+	updatedBuild, err := queries.UpdateBuildStatus(
+		ctx,
+		psql.UpdateBuildStatusParams{
+			ID:     b.ID(),
+			Status: status.StatusStarted.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
 
-		if b.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	b.Build = updatedBuild
 
-		updatedBuild, err := queries.UpdateBuildStatus(
-			txCtx,
-			psql.UpdateBuildStatusParams{
-				ID:     b.ID(),
-				Status: status.StatusStarted.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		b.Build = updatedBuild
+	return nil
+}
 
-		return nil
-	})
+func (b *build) Finish(ctx context.Context, status status.Status) error {
+	queries := b.queries.Queries(ctx)
+
+	if b.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedBuild, err := queries.UpdateBuildStatus(
+		ctx,
+		psql.UpdateBuildStatusParams{
+			ID:     b.ID(),
+			Status: string(status),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	b.Build = updatedBuild
+
+	return nil
 }
 
 func (b *build) Abort(ctx context.Context) error {
 	return b.Finish(ctx, status.StatusAborted)
-}
-
-func (b *build) Finish(ctx context.Context, status status.Status) error {
-	return b.WithTx(ctx, func(txCtx context.Context) error {
-		queries := b.queries.Queries(txCtx)
-
-		lockedBuild, err := queries.LockBuild(txCtx, b.ID())
-		if err != nil {
-			return err
-		}
-		b.Build = lockedBuild
-
-		if b.IsFinished() {
-			return ErrAlreadyFinished
-		}
-
-		updatedBuild, err := queries.UpdateBuildStatus(
-			txCtx,
-			psql.UpdateBuildStatusParams{
-				ID:     b.ID(),
-				Status: string(status),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		b.Build = updatedBuild
-
-		return nil
-	})
 }
 
 func (b *build) Jobs(ctx context.Context) ([]Job, error) {
@@ -262,12 +250,4 @@ func (b *build) Jobs(ctx context.Context) ([]Job, error) {
 
 func (b *build) WithTx(ctx context.Context, f func(txCtx context.Context) error) error {
 	return b.queries.WithTx(ctx, f)
-}
-
-func (b *build) IsRunning() bool {
-	return b.Status().IsRunning()
-}
-
-func (b *build) IsFinished() bool {
-	return b.Status().IsFinished()
 }

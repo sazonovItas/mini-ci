@@ -45,6 +45,8 @@ func (s *Step) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return fmt.Errorf("re-marshal rawStepConfig: %w", err)
 		}
+
+		s.Config = step
 	}
 
 	if s.Config == nil {

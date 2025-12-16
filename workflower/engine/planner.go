@@ -19,8 +19,8 @@ var (
 
 type Planner struct{}
 
-func NewPlanner() *Planner {
-	return &Planner{}
+func NewPlanner() Planner {
+	return Planner{}
 }
 
 func (p Planner) JobPlan(cfg model.WorkflowConfig) (model.JobPlan, error) {
@@ -53,7 +53,7 @@ func (p Planner) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
 	headPlan := &model.TaskPlan{
 		Ref: &model.OriginRef{ID: p.nextID()},
 		Config: model.Step{
-			Config: model.InitStep{
+			Config: &model.InitStep{
 				Name:  initPlanName,
 				Image: cfg.Run.Image,
 				Cwd:   cfg.Run.Cwd,
@@ -67,7 +67,7 @@ func (p Planner) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
 		currPlan.Next = &model.TaskPlan{
 			Ref: &model.OriginRef{ID: p.nextID()},
 			Config: model.Step{
-				Config: model.ScriptConfig{
+				Config: &model.ScriptStep{
 					Name:    script.Name,
 					Command: script.Command,
 					Args:    script.Args,
@@ -81,7 +81,7 @@ func (p Planner) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
 	currPlan.Next = &model.TaskPlan{
 		Ref: &model.OriginRef{ID: p.nextID()},
 		Config: model.Step{
-			Config: model.CleanupStep{
+			Config: &model.CleanupStep{
 				Name: cleanupPlanName,
 			},
 		},

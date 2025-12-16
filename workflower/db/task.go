@@ -93,8 +93,9 @@ type Task interface {
 	Config() model.Step
 	Model() model.Task
 
-	SetPending(ctx context.Context) error
+	Lock(ctx context.Context) error
 
+	Pending(ctx context.Context) error
 	Start(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Finish(ctx context.Context, status status.Status) error
@@ -140,102 +141,93 @@ func (t *task) Model() model.Task {
 	}
 }
 
-func (t *task) SetPending(ctx context.Context) error {
-	return t.WithTx(ctx, func(txCtx context.Context) error {
-		queries := t.queries.Queries(txCtx)
+func (t *task) Lock(ctx context.Context) error {
+	queries := t.queries.Queries(ctx)
 
-		lockedTask, err := queries.LockTask(txCtx, t.ID())
-		if err != nil {
-			return err
-		}
-		t.Task = lockedTask
+	lockedTask, err := queries.LockTask(ctx, t.ID())
+	if err != nil {
+		return err
+	}
 
-		if t.IsRunning() {
-			return ErrAlreadyRunning
-		}
+	t.Task = lockedTask
 
-		if t.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	return nil
+}
 
-		updatedTask, err := queries.UpdateTaskStatus(
-			txCtx,
-			psql.UpdateTaskStatusParams{
-				ID:     t.ID(),
-				Status: status.StatusPending.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		t.Task = updatedTask
+func (t *task) Pending(ctx context.Context) error {
+	queries := t.queries.Queries(ctx)
 
-		return nil
-	})
+	if t.Status().IsRunning() {
+		return ErrAlreadyRunning
+	}
+
+	if t.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedTask, err := queries.UpdateTaskStatus(
+		ctx,
+		psql.UpdateTaskStatusParams{
+			ID:     t.ID(),
+			Status: status.StatusPending.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	t.Task = updatedTask
+
+	return nil
 }
 
 func (t *task) Start(ctx context.Context) error {
-	return t.WithTx(ctx, func(txCtx context.Context) error {
-		queries := t.queries.Queries(txCtx)
+	queries := t.queries.Queries(ctx)
 
-		lockedTask, err := queries.LockTask(txCtx, t.ID())
-		if err != nil {
-			return err
-		}
-		t.Task = lockedTask
+	if t.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
 
-		if t.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	updatedTask, err := queries.UpdateTaskStatus(
+		ctx,
+		psql.UpdateTaskStatusParams{
+			ID:     t.ID(),
+			Status: status.StatusStarted.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+	t.Task = updatedTask
 
-		updatedTask, err := queries.UpdateTaskStatus(
-			txCtx,
-			psql.UpdateTaskStatusParams{
-				ID:     t.ID(),
-				Status: status.StatusStarted.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		t.Task = updatedTask
+	return nil
+}
 
-		return nil
-	})
+func (t *task) Finish(ctx context.Context, status status.Status) error {
+	queries := t.queries.Queries(ctx)
+
+	if t.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedTask, err := queries.UpdateTaskStatus(
+		ctx,
+		psql.UpdateTaskStatusParams{
+			ID:     t.ID(),
+			Status: status.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	t.Task = updatedTask
+
+	return nil
 }
 
 func (t *task) Abort(ctx context.Context) error {
 	return t.Finish(ctx, status.StatusAborted)
-}
-
-func (t *task) Finish(ctx context.Context, status status.Status) error {
-	return t.WithTx(ctx, func(txCtx context.Context) error {
-		queries := t.queries.Queries(txCtx)
-
-		lockedTask, err := queries.LockTask(txCtx, t.ID())
-		if err != nil {
-			return err
-		}
-		t.Task = lockedTask
-
-		if t.IsFinished() {
-			return ErrAlreadyFinished
-		}
-
-		updatedTask, err := queries.UpdateTaskStatus(
-			txCtx,
-			psql.UpdateTaskStatusParams{
-				ID:     t.ID(),
-				Status: status.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		t.Task = updatedTask
-
-		return nil
-	})
 }
 
 func (t *task) UpdateConfig(ctx context.Context, cfg model.Step) error {
@@ -264,12 +256,4 @@ func (t *task) UpdateConfig(ctx context.Context, cfg model.Step) error {
 
 func (t *task) WithTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {
 	return t.queries.WithTx(ctx, txFunc)
-}
-
-func (t *task) IsRunning() bool {
-	return t.Status().IsRunning()
-}
-
-func (t *task) IsFinished() bool {
-	return t.Status().IsFinished()
 }

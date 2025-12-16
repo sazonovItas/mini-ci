@@ -99,8 +99,9 @@ type Job interface {
 	Plan() model.TaskPlan
 	Model() model.Job
 
-	SetPending(ctx context.Context) error
+	Lock(ctx context.Context) error
 
+	Pending(ctx context.Context) error
 	Start(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Finish(ctx context.Context, status status.Status) error
@@ -153,102 +154,94 @@ func (j *job) Model() model.Job {
 	}
 }
 
-func (j *job) SetPending(ctx context.Context) error {
-	return j.WithTx(ctx, func(txCtx context.Context) error {
-		queries := j.queries.Queries(txCtx)
+func (j *job) Lock(ctx context.Context) error {
+	queries := j.queries.Queries(ctx)
 
-		lockedJob, err := queries.LockJob(txCtx, j.ID())
-		if err != nil {
-			return err
-		}
-		j.Job = lockedJob
+	lockedJob, err := queries.LockJob(ctx, j.ID())
+	if err != nil {
+		return err
+	}
 
-		if j.IsRunning() {
-			return ErrAlreadyRunning
-		}
+	j.Job = lockedJob
 
-		if j.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	return nil
+}
 
-		updatedJob, err := queries.UpdateJobStatus(
-			txCtx,
-			psql.UpdateJobStatusParams{
-				ID:     j.ID(),
-				Status: status.StatusPending.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		j.Job = updatedJob
+func (j *job) Pending(ctx context.Context) error {
+	queries := j.queries.Queries(ctx)
 
-		return nil
-	})
+	if j.Status().IsRunning() {
+		return ErrAlreadyRunning
+	}
+
+	if j.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedJob, err := queries.UpdateJobStatus(
+		ctx,
+		psql.UpdateJobStatusParams{
+			ID:     j.ID(),
+			Status: status.StatusPending.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	j.Job = updatedJob
+
+	return nil
 }
 
 func (j *job) Start(ctx context.Context) error {
-	return j.WithTx(ctx, func(txCtx context.Context) error {
-		queries := j.queries.Queries(txCtx)
+	queries := j.queries.Queries(ctx)
 
-		lockedJob, err := queries.LockJob(txCtx, j.ID())
-		if err != nil {
-			return err
-		}
-		j.Job = lockedJob
+	if j.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
 
-		if j.IsFinished() {
-			return ErrAlreadyFinished
-		}
+	updatedJob, err := queries.UpdateJobStatus(
+		ctx,
+		psql.UpdateJobStatusParams{
+			ID:     j.ID(),
+			Status: status.StatusStarted.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
 
-		updatedJob, err := queries.UpdateJobStatus(
-			txCtx,
-			psql.UpdateJobStatusParams{
-				ID:     j.ID(),
-				Status: status.StatusStarted.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		j.Job = updatedJob
+	j.Job = updatedJob
 
-		return nil
-	})
+	return nil
+}
+
+func (j *job) Finish(ctx context.Context, status status.Status) error {
+	queries := j.queries.Queries(ctx)
+
+	if j.Status().IsFinished() {
+		return ErrAlreadyFinished
+	}
+
+	updatedJob, err := queries.UpdateJobStatus(
+		ctx,
+		psql.UpdateJobStatusParams{
+			ID:     j.ID(),
+			Status: status.String(),
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	j.Job = updatedJob
+
+	return nil
 }
 
 func (j *job) Abort(ctx context.Context) error {
 	return j.Finish(ctx, status.StatusAborted)
-}
-
-func (j *job) Finish(ctx context.Context, status status.Status) error {
-	return j.WithTx(ctx, func(txCtx context.Context) error {
-		queries := j.queries.Queries(txCtx)
-
-		lockedJob, err := queries.LockJob(txCtx, j.ID())
-		if err != nil {
-			return err
-		}
-		j.Job = lockedJob
-
-		if j.IsFinished() {
-			return ErrAlreadyFinished
-		}
-
-		updatedJob, err := queries.UpdateJobStatus(
-			txCtx,
-			psql.UpdateJobStatusParams{
-				ID:     j.ID(),
-				Status: status.String(),
-			},
-		)
-		if err != nil {
-			return err
-		}
-		j.Job = updatedJob
-
-		return nil
-	})
 }
 
 func (j *job) Tasks(ctx context.Context) ([]Task, error) {
@@ -269,12 +262,4 @@ func (j *job) Tasks(ctx context.Context) ([]Task, error) {
 
 func (j *job) WithTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {
 	return j.queries.WithTx(ctx, txFunc)
-}
-
-func (j *job) IsRunning() bool {
-	return j.Status().IsRunning()
-}
-
-func (j *job) IsFinished() bool {
-	return j.Status().IsFinished()
 }
