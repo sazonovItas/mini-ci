@@ -6,4 +6,4 @@ worker_io:
   endpoint: "/socket.io/"
 
 postgres:
-  uri: postgres://minici:minici@localhost:5432/minici?search_path=minici&pool_max_conns=10
+  uri: postgres://local:local@localhost:5432/minici?search_path=minici&pool_max_conns=10

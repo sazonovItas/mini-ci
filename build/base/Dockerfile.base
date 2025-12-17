@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=debian:bookworm-slim
+ARG BASE_IMAGE="debian:bookworm-slim"
 FROM ${BASE_IMAGE} AS base
 
 COPY --chmod=0755 files/usr/local/bin/* /usr/local/bin/
@@ -74,7 +74,8 @@ RUN git clone --filter=tree:0 "${RUNC_CLONE_URL}" /runc \
 
 # stage for building cni-plugins
 FROM go-build AS build-cni
-ARG TARGETARCH GO_VERSION
+ARG TARGETARCH
+ARG GO_VERSION
 ARG CNI_PLUGINS_VERSION="v1.7.1"
 ARG CNI_PLUGINS_CLONE_URL="https://github.com/containernetworking/plugins"
 RUN git clone --filter=tree:0 "${CNI_PLUGINS_CLONE_URL}" /cni-plugins \

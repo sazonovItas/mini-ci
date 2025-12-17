@@ -1,0 +1,30 @@
+ARG BUILD_BASE_IMAGE="golang:1.25-bookworm"
+ARG LOCAL_BASE_IMABE="debian:bookworm-slim"
+FROM ${BUILD_BASE_IMAGE} AS build
+
+WORKDIR /src
+COPY go.mod .
+COPY go.sum .
+
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+  go mod download
+
+COPY . .
+
+ARG TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod/ \
+  GOARCH=${TARGETARCH} CGO_ENABLED=0 go build -o ./bin/workflower ./cmd/workflower
+
+FROM ${LOCAL_BASE_IMABE} AS local
+
+RUN apt-get update \
+  && apt-get upgrade -y \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && apt-get clean -y \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /src/bin/workflower /usr/local/bin/workflower
+
+EXPOSE 8080 8081
+
+ENTRYPOINT [ "/usr/local/bin/workflower" ]
