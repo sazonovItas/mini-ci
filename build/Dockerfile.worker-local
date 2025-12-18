@@ -17,4 +17,8 @@ RUN --mount=type=cache,target=/go/pkg/mod/ \
 
 FROM ${LOCAL_BASE_IMAGE} AS local
 
-COPY --from=build /src/bin/worker /usr/local/bin/worker
+COPY --from=build /src/bin/worker /usr/local/bin/minici-worker
+
+COPY deploy/minici-worker.service /etc/systemd/system/minici-worker.service
+
+RUN systemctl enable minici-worker

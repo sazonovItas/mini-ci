@@ -3,7 +3,7 @@ networks:
 
 services:
   db:
-    image: timescale/timescaledb:${TIMESCALE_TAG:-latest-pg17}
+    image: timescale/timescaledb:${TIMESCALE_TAG:-"latest-pg17"}
     ports:
       - 5432:5432
     environment:
@@ -25,3 +25,7 @@ services:
     cgroup: host
     networks:
       - default
+    environment:
+      - MINICI_WORKER_NAME="local"
+      - MINICI_WORKER_SOCKET_IO_URL="http://0.0.0.0:8081/socket.io/"
+      - MINICI_WORKER_RUNTIME_SNAPSHOTTER="fuse-overlayfs"

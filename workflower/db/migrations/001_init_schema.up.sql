@@ -11,13 +11,13 @@ CREATE TABLE IF NOT EXISTS workflows (
 
 CREATE TABLE IF NOT EXISTS builds (
   id          varchar(36) NOT NULL,
-  workflow_id varchar(36) NOT NULL,
+  workflow_id varchar(36) NOT NULL DEFAULT 'null',
   status      text        NOT NULL,
   config      jsonb       DEFAULT NULL,
   plan        jsonb       DEFAULT NULL,
   created_at  timestamp   DEFAULT NOW(),
   PRIMARY KEY (id),
-  FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
+  FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE SET DEFAULT
 );
 
 CREATE TABLE IF NOT EXISTS jobs (

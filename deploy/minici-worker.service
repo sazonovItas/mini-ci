@@ -1,0 +1,13 @@
+[Unit]
+Description=minici worker
+After=network.target containerd.service
+
+[Service]
+ExecStart=/usr/local/bin/minici-worker
+
+Type=notify
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
