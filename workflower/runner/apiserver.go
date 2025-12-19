@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 
-	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
 )
 
@@ -30,22 +29,14 @@ func NewAPIServer(bus events.Bus, cfg APIServerConfig) *APIServer {
 	}
 }
 
-func (r *APIServer) Start(parentCtx context.Context) error {
-	r.ctx, r.cancel = context.WithCancel(parentCtx)
+func (r *APIServer) Start(ctx context.Context) {
+	r.ctx, r.cancel = context.WithCancel(ctx)
 
-	if err := r.httpServer.Start(r.ctx); err != nil {
-		log.G(r.ctx).WithError(err).Error("failed to start api http server")
-	}
-
-	return nil
+	r.httpServer.Start(r.ctx)
 }
 
-func (r *APIServer) Stop(ctx context.Context) error {
+func (r *APIServer) Stop(ctx context.Context) {
 	r.cancel()
 
-	if err := r.httpServer.Stop(ctx); err != nil {
-		log.G(ctx).WithError(err).Error("failed to stop api http server")
-	}
-
-	return nil
+	r.httpServer.Stop(ctx)
 }

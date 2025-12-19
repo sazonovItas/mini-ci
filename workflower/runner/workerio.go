@@ -96,21 +96,16 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 	return runner
 }
 
-func (r *WorkerIO) Start(ctx context.Context) error {
+func (r *WorkerIO) Start(ctx context.Context) {
 	r.ctx, r.cancel = context.WithCancel(ctx)
 
 	r.wg.Go(func() { r.startReceiver(ctx) })
-
 	r.wg.Go(func() { r.startBusForwarder(ctx) })
 
-	if err := r.httpServer.Start(r.ctx); err != nil {
-		log.G(r.ctx).WithError(err).Error("failed to start worker http server")
-	}
-
-	return nil
+	r.httpServer.Start(r.ctx)
 }
 
-func (r *WorkerIO) Stop(ctx context.Context) error {
+func (r *WorkerIO) Stop(ctx context.Context) {
 	r.cancel()
 	r.sendq.Shutdown()
 	r.recvq.Shutdown()
@@ -121,13 +116,9 @@ func (r *WorkerIO) Stop(ctx context.Context) error {
 		}
 	})
 
-	if err := r.httpServer.Stop(ctx); err != nil {
-		log.G(ctx).WithError(err).Error("failed to stop worker http server")
-	}
+	r.httpServer.Stop(ctx)
 
 	r.wg.Wait()
-
-	return nil
 }
 
 func (r *WorkerIO) Events() (<-chan events.Event, io.Closer) {

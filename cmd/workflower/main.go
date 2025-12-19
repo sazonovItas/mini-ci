@@ -40,13 +40,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	if err := workflower.Start(ctx); err != nil {
-		panic(err)
-	}
+	workflower.Start(ctx)
 
 	<-ctx.Done()
 
-	if err := workflower.Stop(context.TODO()); err != nil {
-		panic(err)
-	}
+	workflower.Stop(context.TODO())
 }

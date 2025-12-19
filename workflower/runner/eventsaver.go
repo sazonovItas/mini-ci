@@ -13,14 +13,22 @@ type EventSaver struct {
 	watcher *watcher.Watcher
 }
 
-func NewEventSaver(subscriber events.Subscriber, eventRepo *db.EventRepository) EventSaver {
-	return EventSaver{
+func NewEventSaver(subscriber events.Subscriber, eventRepo *db.EventRepository) *EventSaver {
+	return &EventSaver{
 		watcher: watcher.NewWatcher(
 			subscriber,
 			NewEventSaverProcessor(eventRepo),
 			watcher.WithSyncProcessing(),
 		),
 	}
+}
+
+func (s EventSaver) Start(ctx context.Context) {
+	s.watcher.Start(ctx)
+}
+
+func (s EventSaver) Stop(_ context.Context) {
+	s.watcher.Stop()
 }
 
 type EventSaverProcessor struct {

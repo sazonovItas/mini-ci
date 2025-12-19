@@ -27,7 +27,7 @@ func NewHTTPServer(address string, handler http.Handler) *HTTPServer {
 	}
 }
 
-func (r *HTTPServer) Start(ctx context.Context) error {
+func (r *HTTPServer) Start(ctx context.Context) {
 	r.wg.Go(func() {
 		if err := r.server.ListenAndServe(); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
@@ -35,16 +35,12 @@ func (r *HTTPServer) Start(ctx context.Context) error {
 			}
 		}
 	})
-
-	return nil
 }
 
-func (r *HTTPServer) Stop(ctx context.Context) error {
+func (r *HTTPServer) Stop(ctx context.Context) {
 	if err := r.server.Shutdown(ctx); err != nil {
 		log.G(ctx).WithError(err).Error("failed to shutdown http server")
 	}
 
 	r.wg.Wait()
-
-	return nil
 }

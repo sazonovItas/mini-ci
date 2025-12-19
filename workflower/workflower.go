@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/containerd/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sazonovItas/mini-ci/core/events/exchange"
 	"github.com/sazonovItas/mini-ci/workflower/config"
@@ -13,12 +12,14 @@ import (
 )
 
 type Workflower struct {
-	workerIO  *runner.WorkerIO
-	apiServer *runner.APIServer
+	workerIO   *runner.WorkerIO
+	apiServer  *runner.APIServer
+	logSaver   *runner.TaskLogSaver
+	eventSaver *runner.EventSaver
 
-	db *pgdb.DB
+	db  *pgdb.DB
+	bus *exchange.Exchange
 
-	bus    *exchange.Exchange
 	pgpool *pgxpool.Pool
 
 	wg sync.WaitGroup
@@ -48,51 +49,40 @@ func New(cfg config.Config) (*Workflower, error) {
 		},
 	)
 
+	logSaver := runner.NewTaskLogSaver(bus, db.TaskLogRepository())
+
+	eventSaver := runner.NewEventSaver(bus, db.EventRepository())
+
 	workflower := &Workflower{
-		apiServer: apiServer,
-		workerIO:  workerIO,
-		bus:       bus,
-		db:        db,
-		pgpool:    pgpool,
+		apiServer:  apiServer,
+		workerIO:   workerIO,
+		logSaver:   logSaver,
+		eventSaver: eventSaver,
+
+		bus:    bus,
+		db:     db,
+		pgpool: pgpool,
 	}
 
 	return workflower, nil
 }
 
-func (w *Workflower) Start(ctx context.Context) error {
-	w.wg.Go(func() {
-		if err := w.workerIO.Start(ctx); err != nil {
-			log.G(ctx).WithError(err).Error("failed to start worker socket io")
-		}
-	})
-
-	w.wg.Go(func() {
-		if err := w.apiServer.Start(ctx); err != nil {
-			log.G(ctx).WithError(err).Error("failed to start api server")
-		}
-	})
-
-	return nil
+func (w *Workflower) Start(ctx context.Context) {
+	w.wg.Go(func() { w.logSaver.Start(ctx) })
+	w.wg.Go(func() { w.eventSaver.Start(ctx) })
+	w.wg.Go(func() { w.workerIO.Start(ctx) })
+	w.wg.Go(func() { w.apiServer.Start(ctx) })
 }
 
-func (w *Workflower) Stop(ctx context.Context) error {
-	w.wg.Go(func() {
-		if err := w.workerIO.Stop(ctx); err != nil {
-			log.G(ctx).WithError(err).Error("failed to stop worker socket io")
-		}
-	})
-
-	w.wg.Go(func() {
-		if err := w.apiServer.Stop(ctx); err != nil {
-			log.G(ctx).WithError(err).Error("failed to stop api server")
-		}
-	})
+func (w *Workflower) Stop(ctx context.Context) {
+	w.wg.Go(func() { w.apiServer.Stop(ctx) })
+	w.wg.Go(func() { w.workerIO.Stop(ctx) })
+	w.wg.Go(func() { w.logSaver.Stop(ctx) })
+	w.wg.Go(func() { w.eventSaver.Stop(ctx) })
 
 	w.wg.Wait()
 
 	w.cleanup()
-
-	return nil
 }
 
 func (w *Workflower) cleanup() {

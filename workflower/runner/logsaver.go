@@ -13,8 +13,8 @@ type TaskLogSaver struct {
 	watcher *watcher.Watcher
 }
 
-func NewTaskLogSaver(subscriber events.Subscriber, taskLogRepo *db.TaskLogRepository) TaskLogSaver {
-	return TaskLogSaver{
+func NewTaskLogSaver(subscriber events.Subscriber, taskLogRepo *db.TaskLogRepository) *TaskLogSaver {
+	return &TaskLogSaver{
 		watcher: watcher.NewWatcher(
 			subscriber,
 			NewTaskLogProcessor(taskLogRepo),
@@ -26,7 +26,7 @@ func (s TaskLogSaver) Start(ctx context.Context) {
 	s.watcher.Start(ctx)
 }
 
-func (s TaskLogSaver) Stop() {
+func (s TaskLogSaver) Stop(_ context.Context) {
 	s.watcher.Stop()
 }
 
