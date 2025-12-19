@@ -39,7 +39,7 @@ func (l *eventLogger) Log(msg string) {
 
 func (l *eventLogger) Process(id string, stdout <-chan string, stderr <-chan string) error {
 	const (
-		messagesSendTimeout = 1 * time.Second
+		messagesSendTimeout = 5 * time.Second
 	)
 
 	ticker := time.NewTicker(messagesSendTimeout)
