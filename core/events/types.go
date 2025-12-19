@@ -13,6 +13,7 @@ const (
 
 	EventTypeScriptStart  EventType = "script:start"
 	EventTypeScriptFinish EventType = "script:finish"
+	EventTypeScriptAbort  EventType = "script:abort"
 
 	EventTypeBuildStatus EventType = "build:status"
 	EventTypeJobStatus   EventType = "job:status"
@@ -23,6 +24,5 @@ const (
 	EventTypeTaskAbort  EventType = "task:abort"
 
 	EventTypeTaskLog EventType = "task:log"
-
-	EventTypeError EventType = "error"
+	EventTypeError   EventType = "task:error"
 )

@@ -166,7 +166,11 @@ type CleanupStep struct {
 
 func (s *CleanupStep) SetOutputs(outputs *Outputs) {}
 
-func (s *CleanupStep) GetOutputs(outputs *Outputs) {}
+func (s *CleanupStep) GetOutputs(outputs *Outputs) {
+	if outputs.Init != nil {
+		s.ContainerID = outputs.Init.ContainerID
+	}
+}
 
 type Outputs struct {
 	Init *InitOutputs

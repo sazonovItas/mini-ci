@@ -29,6 +29,7 @@ func (p TaskProcessor) Filters() []events.FilterFunc {
 			events.EventTypeInitContainerFinish,
 			events.EventTypeScriptFinish,
 			events.EventTypeError,
+			events.EventTypeTaskAbort,
 		),
 	}
 }
@@ -36,7 +37,7 @@ func (p TaskProcessor) Filters() []events.FilterFunc {
 func (p TaskProcessor) ProcessEvent(ctx context.Context, event events.Event) (err error) {
 	switch e := event.(type) {
 	case events.TaskStatus:
-		err = p.pendingStatus(ctx, e)
+		err = p.taskStatus(ctx, e)
 
 	case events.InitContainerFinish:
 		err = p.initContainerFinish(ctx, e)
@@ -44,8 +45,11 @@ func (p TaskProcessor) ProcessEvent(ctx context.Context, event events.Event) (er
 	case events.ScriptFinish:
 		err = p.scriptFinish(ctx, e)
 
-	case events.Error:
+	case events.TaskError:
 		err = p.error(ctx, e)
+
+	case events.TaskAbort:
+		err = p.taskAbort(ctx, e)
 
 	default:
 		log.G(ctx).Errorf("task processor: unknown event type %T to process", e)
@@ -58,7 +62,7 @@ func (p TaskProcessor) ProcessEvent(ctx context.Context, event events.Event) (er
 	return err
 }
 
-func (p *TaskProcessor) initContainerFinish(ctx context.Context, event events.InitContainerFinish) error {
+func (p TaskProcessor) initContainerFinish(ctx context.Context, event events.InitContainerFinish) error {
 	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
 		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
@@ -66,7 +70,7 @@ func (p *TaskProcessor) initContainerFinish(ctx context.Context, event events.In
 		}
 
 		if !found {
-			return nil
+			return ErrTaskNotFound
 		}
 
 		err = task.Lock(txCtx)
@@ -74,10 +78,10 @@ func (p *TaskProcessor) initContainerFinish(ctx context.Context, event events.In
 			return err
 		}
 
-		config := task.Config().Config.(*model.InitStep)
+		config := task.Config().(*model.InitStep)
 		config.Outputs = &model.InitOutputs{ContainerID: event.ContainerID}
 
-		err = task.UpdateConfig(ctx, model.Step{Config: config})
+		err = task.UpdateConfig(ctx, config)
 		if err != nil {
 			return err
 		}
@@ -98,7 +102,7 @@ func (p *TaskProcessor) initContainerFinish(ctx context.Context, event events.In
 	})
 }
 
-func (p *TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFinish) error {
+func (p TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFinish) error {
 	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
 		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
 		if err != nil {
@@ -106,7 +110,7 @@ func (p *TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFin
 		}
 
 		if !found {
-			return nil
+			return ErrTaskNotFound
 		}
 
 		err = task.Lock(txCtx)
@@ -114,10 +118,10 @@ func (p *TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFin
 			return err
 		}
 
-		config := task.Config().Config.(*model.ScriptStep)
+		config := task.Config().(*model.ScriptStep)
 		config.Outputs = &model.ScriptOutputs{ExitStatus: event.ExitStatus, Succeeded: event.Succeeded}
 
-		err = task.UpdateConfig(ctx, model.Step{Config: config})
+		err = task.UpdateConfig(ctx, config)
 		if err != nil {
 			return err
 		}
@@ -141,15 +145,15 @@ func (p *TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFin
 	})
 }
 
-func (p *TaskProcessor) error(ctx context.Context, event events.Error) error {
+func (p TaskProcessor) error(ctx context.Context, event events.TaskError) error {
 	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
+		task, found, err := p.tasks.Task(ctx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
 
 		if !found {
-			return nil
+			return ErrTaskNotFound
 		}
 
 		err = task.Lock(txCtx)
@@ -171,19 +175,19 @@ func (p *TaskProcessor) error(ctx context.Context, event events.Error) error {
 	})
 }
 
-func (p *TaskProcessor) pendingStatus(ctx context.Context, event events.TaskStatus) error {
+func (p TaskProcessor) taskStatus(ctx context.Context, event events.TaskStatus) error {
 	if !event.Status.IsPending() {
 		return nil
 	}
 
 	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
-		task, found, err := p.tasks.Task(txCtx, event.Origin().ID)
+		task, found, err := p.tasks.Task(ctx, event.Origin().ID)
 		if err != nil {
 			return err
 		}
 
 		if !found {
-			return nil
+			return ErrTaskNotFound
 		}
 
 		err = task.Lock(txCtx)
@@ -191,7 +195,10 @@ func (p *TaskProcessor) pendingStatus(ctx context.Context, event events.TaskStat
 			return err
 		}
 
-		nextStatus, event := p.startTask(ctx, task.Model())
+		nextStatus, event, err := p.startTask(ctx, task.Model())
+		if err != nil {
+			return err
+		}
 
 		if nextStatus.IsFinished() {
 			err = task.Finish(txCtx, nextStatus)
@@ -205,11 +212,11 @@ func (p *TaskProcessor) pendingStatus(ctx context.Context, event events.TaskStat
 			}
 		}
 
-		if err := p.Publish(ctx, event); err != nil {
+		if err := p.publish(txCtx, event); err != nil {
 			return err
 		}
 
-		if err := p.publishStatusChanged(ctx, task.Model()); err != nil {
+		if err := p.publishStatusChanged(txCtx, task.Model()); err != nil {
 			return err
 		}
 
@@ -217,7 +224,7 @@ func (p *TaskProcessor) pendingStatus(ctx context.Context, event events.TaskStat
 	})
 }
 
-func (p *TaskProcessor) startTask(ctx context.Context, task model.Task) (status.Status, events.Event) {
+func (p TaskProcessor) startTask(ctx context.Context, task model.Task) (status.Status, events.Event, error) {
 	var (
 		origin     = events.NewEventOrigin(task.ID)
 		nextStatus = status.StatusStarted
@@ -255,12 +262,67 @@ func (p *TaskProcessor) startTask(ctx context.Context, task model.Task) (status.
 
 	default:
 		log.G(ctx).Errorf("task watcher unknown task type %T", step)
+		return nextStatus, nil, ErrTaskNotFound
 	}
 
-	return nextStatus, event
+	return nextStatus, event, nil
 }
 
-func (p *TaskProcessor) publishStatusChanged(ctx context.Context, task model.Task) error {
+func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) error {
+	task, found, err := p.tasks.Task(ctx, event.Origin().ID)
+	if err != nil {
+		return err
+	}
+
+	if !found {
+		return ErrTaskNotFound
+	}
+
+	if task.Status().IsFinished() {
+		return nil
+	}
+
+	return task.WithTx(ctx, func(txCtx context.Context) error {
+		err = task.Lock(txCtx)
+		if err != nil {
+			return err
+		}
+
+		err = p.abortStep(txCtx, task.ID(), task.Config())
+		if err != nil {
+			return err
+		}
+
+		err = task.Finish(ctx, status.StatusAborted)
+		if err != nil {
+			return err
+		}
+
+		err = p.publishStatusChanged(ctx, task.Model())
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (p TaskProcessor) abortStep(ctx context.Context, taskID string, step model.StepConfig) (err error) {
+	switch config := step.(type) {
+	case *model.ScriptStep:
+		err = p.publish(ctx, events.ScriptAbort{EventOrigin: events.NewEventOrigin(taskID)})
+	default:
+		log.G(ctx).Debugf("cannot abort task with step type %T", config)
+	}
+
+	if err != nil {
+		log.G(ctx).WithError(err).Errorf("failed to abort step")
+	}
+
+	return nil
+}
+
+func (p TaskProcessor) publishStatusChanged(ctx context.Context, task model.Task) error {
 	event := events.TaskStatus{
 		ChangeStatus: events.ChangeStatus{
 			EventOrigin: events.NewEventOrigin(task.ID),
@@ -269,9 +331,9 @@ func (p *TaskProcessor) publishStatusChanged(ctx context.Context, task model.Tas
 		JobID: task.JobID,
 	}
 
-	return p.Publish(ctx, event)
+	return p.publish(ctx, event)
 }
 
-func (p *TaskProcessor) Publish(ctx context.Context, event events.Event) error {
+func (p TaskProcessor) publish(ctx context.Context, event events.Event) error {
 	return p.publisher.Publish(ctx, event)
 }

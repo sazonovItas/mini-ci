@@ -11,6 +11,7 @@ const (
 	StatusFailed    Status = "failed"
 	StatusErrored   Status = "errored"
 	StatusAborted   Status = "aborted"
+	StatusUnknown   Status = "unknown"
 )
 
 func (s Status) String() string {
@@ -56,4 +57,8 @@ func (s Status) IsErrored() bool {
 
 func (s Status) IsAborted() bool {
 	return s == StatusAborted
+}
+
+func (s Status) IsUnknown() bool {
+	return s == StatusUnknown
 }

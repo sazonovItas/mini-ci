@@ -2,10 +2,17 @@ package engine
 
 import (
 	"context"
+	"errors"
 
 	"github.com/sazonovItas/mini-ci/core/events"
 	"github.com/sazonovItas/mini-ci/core/events/watcher"
 	"github.com/sazonovItas/mini-ci/workflower/db"
+)
+
+var (
+	ErrBuildNotFound = errors.New("build not found")
+	ErrJobNotFound   = errors.New("job not found")
+	ErrTaskNotFound  = errors.New("task not found")
 )
 
 type Engine struct {

@@ -13,12 +13,13 @@ func init() {
 	registerEvent[CleanupContainer]()
 	registerEvent[ScriptStart]()
 	registerEvent[ScriptFinish]()
+	registerEvent[ScriptAbort]()
 	registerEvent[TaskAbort]()
-	registerEvent[TaskLog]()
-	registerEvent[Error]()
 	registerEvent[BuildStatus]()
 	registerEvent[JobStatus]()
 	registerEvent[TaskStatus]()
+	registerEvent[TaskError]()
+	registerEvent[TaskLog]()
 }
 
 func registerEvent[T Event]() {
@@ -109,6 +110,13 @@ type ScriptFinish struct {
 
 func (ScriptFinish) Type() EventType { return EventTypeScriptFinish }
 
+type ScriptAbort struct {
+	EventOrigin `json:",inline"`
+	ContainerID string `json:"containerId"`
+}
+
+func (ScriptAbort) Type() EventType { return EventTypeScriptAbort }
+
 type BuildAbort struct {
 	EventOrigin `json:",inline"`
 }
@@ -123,7 +131,6 @@ func (JobAbort) Type() EventType { return EventTypeJobAbort }
 
 type TaskAbort struct {
 	EventOrigin `json:",inline"`
-	ContainerID string `json:"containerId"`
 }
 
 func (TaskAbort) Type() EventType { return EventTypeTaskAbort }
@@ -140,16 +147,12 @@ type TaskLog struct {
 
 func (TaskLog) Type() EventType { return EventTypeTaskLog }
 
-type Error struct {
+type TaskError struct {
 	EventOrigin `json:",inline"`
 	Message     string `json:"message"`
 }
 
-func (Error) Type() EventType { return EventTypeError }
-
-func NewErrorEvent(origin EventOrigin, msg string) Error {
-	return Error{EventOrigin: origin, Message: msg}
-}
+func (TaskError) Type() EventType { return EventTypeError }
 
 type ChangeStatus struct {
 	EventOrigin `json:",inline"`

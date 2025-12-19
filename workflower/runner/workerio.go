@@ -145,7 +145,7 @@ func (r *WorkerIO) startBusForwarder(ctx context.Context) {
 		events.WithEventTypes(
 			events.EventTypeInitContainerFinish,
 			events.EventTypeScriptStart,
-			events.EventTypeTaskAbort,
+			events.EventTypeScriptAbort,
 			events.EventTypeCleanupContainer,
 		),
 	)

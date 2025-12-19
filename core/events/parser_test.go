@@ -23,11 +23,11 @@ func TestMessageParsing(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "Error event",
+			name: "Task error event",
 			args: args{
-				Event: Error{
+				Event: TaskError{
 					EventOrigin: NewEventOrigin("86dd0fd2-ce19-4452-bf6f-c1102475eb18"),
-					Message:     "test errror event",
+					Message:     "test  task error event",
 				},
 			},
 		},

@@ -90,7 +90,7 @@ type Task interface {
 	JobID() string
 	Name() string
 	Status() status.Status
-	Config() model.Step
+	Config() model.StepConfig
 	Model() model.Task
 
 	Lock(ctx context.Context) error
@@ -100,7 +100,7 @@ type Task interface {
 	Abort(ctx context.Context) error
 	Finish(ctx context.Context, status status.Status) error
 
-	UpdateConfig(ctx context.Context, config model.Step) error
+	UpdateConfig(ctx context.Context, config model.StepConfig) error
 }
 
 type task struct {
@@ -125,10 +125,10 @@ func (t *task) Status() status.Status {
 	return status.Status(t.Task.Status)
 }
 
-func (t *task) Config() model.Step {
-	var config model.Step
-	_ = json.Unmarshal(t.Task.Config, &config)
-	return config
+func (t *task) Config() model.StepConfig {
+	var step model.Step
+	_ = json.Unmarshal(t.Task.Config, &step)
+	return step.Config
 }
 
 func (t *task) Model() model.Task {
@@ -137,7 +137,7 @@ func (t *task) Model() model.Task {
 		JobID:  t.JobID(),
 		Name:   t.Name(),
 		Status: t.Status(),
-		Config: t.Config(),
+		Config: model.Step{Config: t.Config()},
 	}
 }
 
@@ -230,10 +230,10 @@ func (t *task) Abort(ctx context.Context) error {
 	return t.Finish(ctx, status.StatusAborted)
 }
 
-func (t *task) UpdateConfig(ctx context.Context, cfg model.Step) error {
+func (t *task) UpdateConfig(ctx context.Context, cfg model.StepConfig) error {
 	queries := t.queries.Queries(ctx)
 
-	config, err := json.Marshal(cfg)
+	config, err := json.Marshal(model.Step{Config: cfg})
 	if err != nil {
 		return nil
 	}

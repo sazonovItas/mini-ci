@@ -59,7 +59,13 @@ func (p *EventProcessor) Process(ctx context.Context, evch <-chan events.Event) 
 
 			p.wg.Go(func() {
 				if err := p.process(ctx, event); err != nil {
-					_ = p.Publisher.Publish(ctx, events.NewErrorEvent(event.Origin(), err.Error()))
+					_ = p.Publisher.Publish(
+						ctx,
+						events.TaskError{
+							EventOrigin: events.NewEventOrigin(event.Origin().ID),
+							Message:     err.Error(),
+						},
+					)
 				}
 			})
 		}
@@ -78,7 +84,7 @@ func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
 	case events.ScriptStart:
 		return p.scriptStart(ctx, event)
 
-	case events.TaskAbort:
+	case events.ScriptAbort:
 		return p.scriptAbort(ctx, event)
 
 	case events.CleanupContainer:
@@ -167,7 +173,7 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 	return nil
 }
 
-func (p *EventProcessor) scriptAbort(ctx context.Context, event events.TaskAbort) error {
+func (p *EventProcessor) scriptAbort(ctx context.Context, event events.ScriptAbort) error {
 	container, err := p.runtime.Container(ctx, event.ContainerID)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
