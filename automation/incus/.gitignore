@@ -1,5 +1,0 @@
-.ssh_keys
-
-*terraform*
-*.tfstate
-*.tfvars
