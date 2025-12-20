@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/sazonovItas/mini-ci/workflower/model"
@@ -15,36 +14,19 @@ type WorkflowRequest struct {
 }
 
 func (a *API) listWorkflows(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-
-	limit := 10
-	offset := 0
-
-	if l := query.Get("limit"); l != "" {
-		if val, err := strconv.Atoi(l); err == nil {
-			limit = val
-		}
-	}
-
-	if o := query.Get("offset"); o != "" {
-		if val, err := strconv.Atoi(o); err == nil {
-			offset = val
-		}
-	}
-
-	workflows, err := a.db.WorkflowRepository().Workflows(r.Context(), offset, limit)
+	workflows, err := a.db.WorkflowRepository().Workflows(r.Context(), 0, 100)
 	respond(w, workflows, err)
 }
 
 func (a *API) createWorkflow(w http.ResponseWriter, r *http.Request) {
 	var req WorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		respondErrorMessage(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		http.Error(w, "Workflow name is required", http.StatusBadRequest)
+		respondErrorMessage(w, http.StatusBadRequest, "Workflow name is required")
 		return
 	}
 
@@ -69,18 +51,17 @@ func (a *API) updateWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	existing, err := a.db.WorkflowFactory().Workflow(ctx, id)
 	if err != nil {
-		http.Error(w, "Workflow not found", http.StatusNotFound)
 		return
 	}
 
 	var req WorkflowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		respondErrorMessage(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		http.Error(w, "Workflow name is required", http.StatusBadRequest)
+		respondErrorMessage(w, http.StatusBadRequest, "Workflow name is required")
 		return
 	}
 
@@ -90,8 +71,7 @@ func (a *API) updateWorkflow(w http.ResponseWriter, r *http.Request) {
 		Config: req.Config,
 	}
 
-	err = existing.Update(ctx, updatedModel)
-	if err != nil {
+	if err := existing.Update(ctx, updatedModel); err != nil {
 		respondError(w, err)
 		return
 	}

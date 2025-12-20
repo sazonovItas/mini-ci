@@ -16,27 +16,31 @@ func (a *API) startBuild(w http.ResponseWriter, r *http.Request) {
 
 	workflow, err := a.db.WorkflowFactory().Workflow(ctx, workflowID)
 	if err != nil {
-		http.Error(w, "Workflow not found", http.StatusNotFound)
+		respondError(w, err)
 		return
 	}
 	wfModel := workflow.Model()
 
 	if wfModel.CurrBuild != nil && !wfModel.CurrBuild.Status.IsFinished() {
-		http.Error(w, "Workflow is already running (Previous build active). Abort it first.", http.StatusConflict)
+		respondErrorMessage(w, http.StatusConflict, "Workflow is already running (Previous build active). Abort it first.")
 		return
 	}
 
 	if wfModel.CurrBuild == nil && workflow.CurrBuildID() != "" {
-		prevBuild, found, _ := a.db.BuildFactory().Build(ctx, workflow.CurrBuildID())
+		prevBuild, found, err := a.db.BuildFactory().Build(ctx, workflow.CurrBuildID())
+		if err != nil {
+			respondError(w, err)
+			return
+		}
 		if found && !prevBuild.Status().IsFinished() {
-			http.Error(w, "Workflow is already running (Previous build active).", http.StatusConflict)
+			respondErrorMessage(w, http.StatusConflict, "Workflow is already running (Previous build active).")
 			return
 		}
 	}
 
 	planOutput, err := a.planner.Plan(wfModel)
 	if err != nil {
-		http.Error(w, "Planning failed: "+err.Error(), http.StatusBadRequest)
+		respondErrorMessage(w, http.StatusBadRequest, "Planning failed: "+err.Error())
 		return
 	}
 
@@ -82,6 +86,7 @@ func (a *API) listBuilds(w http.ResponseWriter, r *http.Request) {
 		respondError(w, err)
 		return
 	}
+
 	builds, err := wf.Builds(r.Context())
 	if err != nil {
 		respondError(w, err)
@@ -103,7 +108,7 @@ func (a *API) getBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		http.Error(w, "Build not found", http.StatusNotFound)
+		respondErrorMessage(w, http.StatusNotFound, "Build not found")
 		return
 	}
 	respondJSON(w, b.Model())

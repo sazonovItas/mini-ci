@@ -9,14 +9,14 @@ import (
 
 func (a *API) listJobs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
 	b, found, err := a.db.BuildFactory().Build(r.Context(), id)
 	if err != nil {
 		respondError(w, err)
 		return
 	}
-
 	if !found {
-		http.Error(w, "Build not found", http.StatusNotFound)
+		respondErrorMessage(w, http.StatusNotFound, "Build not found")
 		return
 	}
 
@@ -34,13 +34,14 @@ func (a *API) listJobs(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getJob(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
 	j, found, err := a.db.JobFactory().Job(r.Context(), id)
 	if err != nil {
 		respondError(w, err)
 		return
 	}
 	if !found {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		respondErrorMessage(w, http.StatusNotFound, "Job not found")
 		return
 	}
 	respondJSON(w, j.Model())
@@ -48,13 +49,14 @@ func (a *API) getJob(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) listTasks(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
 	j, found, err := a.db.JobFactory().Job(r.Context(), id)
 	if err != nil {
 		respondError(w, err)
 		return
 	}
 	if !found {
-		http.Error(w, "Job not found", http.StatusNotFound)
+		respondErrorMessage(w, http.StatusNotFound, "Job not found")
 		return
 	}
 
@@ -72,13 +74,14 @@ func (a *API) listTasks(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+
 	t, found, err := a.db.TaskFactory().Task(r.Context(), id)
 	if err != nil {
 		respondError(w, err)
 		return
 	}
 	if !found {
-		http.Error(w, "Task not found", http.StatusNotFound)
+		respondErrorMessage(w, http.StatusNotFound, "Task not found")
 		return
 	}
 	respondJSON(w, t.Model())
@@ -86,24 +89,21 @@ func (a *API) getTask(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) getTaskLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-
-	limit := 100
+	limit := 2000
 	offset := 0
 
 	query := r.URL.Query()
-
 	if l := query.Get("limit"); l != "" {
 		if val, err := strconv.Atoi(l); err == nil {
 			limit = val
 		}
 	}
-
 	if o := query.Get("offset"); o != "" {
 		if val, err := strconv.Atoi(o); err == nil {
 			offset = val
 		}
 	}
 
-	logs, err := a.db.TaskLogRepository().LastLogs(r.Context(), id, offset, limit)
+	logs, err := a.db.TaskLogRepository().Logs(r.Context(), id, offset, limit)
 	respond(w, logs, err)
 }

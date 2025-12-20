@@ -48,7 +48,12 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	r.HandleFunc("GET /api/tasks/{id}", a.getTask)
 	r.HandleFunc("GET /api/tasks/{id}/logs", a.getTaskLogs)
 
+	// Wrap with middleware
 	mux.Handle("/", a.withMiddleware(r))
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
 }
 
 func respond(w http.ResponseWriter, data any, err error) {
@@ -61,12 +66,20 @@ func respond(w http.ResponseWriter, data any, err error) {
 
 func respondError(w http.ResponseWriter, err error) {
 	log.G(context.TODO()).WithError(err).Error("API Error")
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+	respondErrorMessage(w, http.StatusInternalServerError, err.Error())
+}
+
+func respondErrorMessage(w http.ResponseWriter, code int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	if err := json.NewEncoder(w).Encode(errorResponse{Error: message}); err != nil {
+		log.G(context.TODO()).WithError(err).Error("failed to encode json error response")
+	}
 }
 
 func respondJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.G(context.TODO()).WithError(err).Error("JSON encode error")
+		log.G(context.TODO()).WithError(err).Error("failed to encode json response")
 	}
 }
