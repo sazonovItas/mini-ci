@@ -37,7 +37,9 @@ func main() {
 		panic(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	ctx, stop := signal.NotifyContext(
+		context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT,
+	)
 	defer stop()
 
 	workflower.Start(ctx)

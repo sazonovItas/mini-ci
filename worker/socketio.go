@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
 	"github.com/sazonovItas/mini-ci/core/events/eventq"
-	"github.com/zishang520/socket.io/clients/engine/v3/transports"
 	"github.com/zishang520/socket.io/clients/socket/v3"
 	"github.com/zishang520/socket.io/v3/pkg/types"
 )
@@ -38,8 +38,10 @@ func NewSocketIORunner(name, address, namespace, eventName string) *SocketIORunn
 	opts.SetUpgrade(true)
 	opts.SetAutoConnect(true)
 	opts.SetReconnection(true)
-	opts.SetReconnectionAttempts(10)
-	opts.SetTransports(types.NewSet(transports.WebSocket, transports.Polling))
+	opts.SetReconnectionAttempts(math.MaxInt32)
+	opts.SetReconnectionDelay(3)
+	opts.SetReconnectionDelayMax(3)
+	opts.SetTimeout(10 * time.Minute)
 
 	manager := socket.NewManager(address, opts)
 
@@ -86,6 +88,20 @@ func (r *SocketIORunner) Events() (<-chan events.Event, io.Closer) {
 }
 
 func (r *SocketIORunner) registerEvents(socket *socket.Socket) (err error) {
+	err = socket.On("connect", func(_ ...any) {
+		log.G(r.ctx).Debug("worker connected to the workflower")
+	})
+	if err != nil {
+		return fmt.Errorf("failed register event listener on connect: %w", err)
+	}
+
+	err = socket.On("disconnect", func(_ ...any) {
+		log.G(r.ctx).Debug("worker disconnected from the workflower")
+	})
+	if err != nil {
+		return fmt.Errorf("failed register event listener on disconnect: %w", err)
+	}
+
 	err = socket.On(types.EventName(r.eventName), func(msgs ...any) {
 		if len(msgs) == 0 {
 			return

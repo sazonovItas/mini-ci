@@ -13,17 +13,18 @@ import (
 const lastTaskLogsWithLimit = `-- name: LastTaskLogsWithLimit :many
 SELECT task_id, message, time FROM task_logs
   WHERE task_id = $1
-  ORDER BY time DESC
-  LIMIT $2
+  ORDER BY time ASC
+  LIMIT $2 OFFSET $3
 `
 
 type LastTaskLogsWithLimitParams struct {
 	TaskID string
 	Limit  int32
+	Offset int32
 }
 
 func (q *Queries) LastTaskLogsWithLimit(ctx context.Context, arg LastTaskLogsWithLimitParams) ([]TaskLog, error) {
-	rows, err := q.db.Query(ctx, lastTaskLogsWithLimit, arg.TaskID, arg.Limit)
+	rows, err := q.db.Query(ctx, lastTaskLogsWithLimit, arg.TaskID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +62,7 @@ func (q *Queries) SaveTaskLog(ctx context.Context, arg SaveTaskLogParams) error 
 const taskLogsSinceWithLimit = `-- name: TaskLogsSinceWithLimit :many
 SELECT task_id, message, time FROM task_logs
   WHERE task_id = $1 AND time > $2
-  ORDER BY time DESC
+  ORDER BY time ASC
   LIMIT $3
 `
 

@@ -116,6 +116,7 @@ var StepDetectors = []StepDetector{
 }
 
 type StepConfig interface {
+	StepName() string
 	SetOutputs(*Outputs)
 	GetOutputs(*Outputs)
 }
@@ -130,6 +131,10 @@ type InitStep struct {
 	Cwd     string       `json:"cwd"`
 	Env     []string     `json:"env"`
 	Outputs *InitOutputs `json:"outputs,omitempty"`
+}
+
+func (s *InitStep) StepName() string {
+	return s.Name
 }
 
 func (s *InitStep) SetOutputs(outputs *Outputs) {
@@ -151,6 +156,10 @@ type ScriptStep struct {
 	Outputs     *ScriptOutputs `json:"outputs,omitempty"`
 }
 
+func (s *ScriptStep) StepName() string {
+	return s.Name
+}
+
 func (s *ScriptStep) SetOutputs(outputs *Outputs) {}
 
 func (s *ScriptStep) GetOutputs(outputs *Outputs) {
@@ -162,6 +171,10 @@ func (s *ScriptStep) GetOutputs(outputs *Outputs) {
 type CleanupStep struct {
 	Name        string `json:"cleanup"`
 	ContainerID string `json:"containerId,omitempty"`
+}
+
+func (s *CleanupStep) StepName() string {
+	return s.Name
 }
 
 func (s *CleanupStep) SetOutputs(outputs *Outputs) {}

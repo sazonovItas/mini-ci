@@ -79,7 +79,7 @@ func (w *Worker) Stop(ctx context.Context) error {
 }
 
 func newContainerRuntime(cfg config.RuntimeConfig) (*runtime.Runtime, error) {
-	client, err := containerd.New(cfg.Address)
+	client, err := containerd.New(cfg.Address, containerd.WithDefaultNamespace(cfg.Namespace))
 	if err != nil {
 		return nil, fmt.Errorf("new containerd client: %w", err)
 	}

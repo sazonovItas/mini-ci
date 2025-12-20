@@ -5,6 +5,14 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+.PHONY: run
+run: workflower
+	./bin/workflower
+
+.PHONY: workflower
+workflower:
+	go build -o bin/workflower ./cmd/workflower
+
 .PHONY: fmt
 fmt: ## Run go fmt against code
 	go fmt ./...

@@ -15,6 +15,7 @@ type Config struct {
 
 type RuntimeConfig struct {
 	Address       string `yaml:"address" mapstructure:"address"`
+	Namespace     string `yaml:"namespace" mapstructure:"namespace"`
 	Snapshotter   string `yaml:"snapshotter" mapstructure:"snapshotter"`
 	DataStorePath string `yaml:"data_store_path" mapstructure:"data_store_path"`
 }

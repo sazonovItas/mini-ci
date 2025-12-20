@@ -73,10 +73,10 @@ func (p TaskProcessor) initContainerFinish(ctx context.Context, event events.Ini
 			return ErrTaskNotFound
 		}
 
-		err = task.Lock(txCtx)
-		if err != nil {
-			return err
-		}
+		// err = task.Lock(txCtx)
+		// if err != nil {
+		// 	return err
+		// }
 
 		config := task.Config().(*model.InitStep)
 		config.Outputs = &model.InitOutputs{ContainerID: event.ContainerID}
@@ -113,10 +113,10 @@ func (p TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFini
 			return ErrTaskNotFound
 		}
 
-		err = task.Lock(txCtx)
-		if err != nil {
-			return err
-		}
+		// err = task.Lock(txCtx)
+		// if err != nil {
+		// 	return err
+		// }
 
 		config := task.Config().(*model.ScriptStep)
 		config.Outputs = &model.ScriptOutputs{ExitStatus: event.ExitStatus, Succeeded: event.Succeeded}
@@ -156,10 +156,10 @@ func (p TaskProcessor) error(ctx context.Context, event events.TaskError) error 
 			return ErrTaskNotFound
 		}
 
-		err = task.Lock(txCtx)
-		if err != nil {
-			return err
-		}
+		// err = task.Lock(txCtx)
+		// if err != nil {
+		// 	return err
+		// }
 
 		err = task.Finish(txCtx, status.StatusErrored)
 		if err != nil {
@@ -190,10 +190,10 @@ func (p TaskProcessor) taskStatus(ctx context.Context, event events.TaskStatus) 
 			return ErrTaskNotFound
 		}
 
-		err = task.Lock(txCtx)
-		if err != nil {
-			return err
-		}
+		// err = task.Lock(txCtx)
+		// if err != nil {
+		// 	return err
+		// }
 
 		nextStatus, event, err := p.startTask(ctx, task.Model())
 		if err != nil {
@@ -283,10 +283,10 @@ func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) er
 	}
 
 	return task.WithTx(ctx, func(txCtx context.Context) error {
-		err = task.Lock(txCtx)
-		if err != nil {
-			return err
-		}
+		// err = task.Lock(txCtx)
+		// if err != nil {
+		// 	return err
+		// }
 
 		err = p.abortStep(txCtx, task.ID(), task.Config())
 		if err != nil {

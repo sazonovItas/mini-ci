@@ -3,10 +3,11 @@ CREATE SCHEMA IF NOT EXISTS minici;
 SET SEARCH_PATH TO minici, PUBLIC;
 
 CREATE TABLE IF NOT EXISTS workflows (
-  id      varchar(36) NOT NULL,
-  name    text        NOT NULL UNIQUE,
-  config  jsonb       NOT NULL,
-  PRIMARY KEY (id)
+  id            varchar(36) NOT NULL,
+  name          text        NOT NULL UNIQUE,
+  curr_build_id varchar(36) NOT NULL DEFAULT 'null',
+  config        jsonb       NOT NULL,
+  PRIMARY KEY   (id)
 );
 
 CREATE TABLE IF NOT EXISTS builds (
@@ -15,7 +16,6 @@ CREATE TABLE IF NOT EXISTS builds (
   status      text        NOT NULL,
   config      jsonb       DEFAULT NULL,
   plan        jsonb       DEFAULT NULL,
-  created_at  timestamp   DEFAULT NOW(),
   PRIMARY KEY (id),
   FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE SET DEFAULT
 );
@@ -58,4 +58,9 @@ CREATE TABLE IF NOT EXISTS events (
   occured_at  timestamp   NOT NULL,
   event_type  text        NOT NULL,        
   payload     jsonb       NOT NULL
+)
+WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='occured_at',
+  timescaledb.segmentby='origin_id'
 );

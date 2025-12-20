@@ -3,9 +3,9 @@ Description=minici worker
 After=network.target containerd.service
 
 [Service]
+Environment="MINICI_WORKER_SOCKET_IO_URL=http://workflower:8081/socket.io/"
+Environment="MINICI_WORKER_RUNTIME_SNAPSHOTTER=fuse-overlayfs"
 ExecStart=/usr/local/bin/minici-worker
-
-Type=notify
 Restart=always
 RestartSec=5
 

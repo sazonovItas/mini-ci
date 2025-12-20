@@ -12,7 +12,7 @@ import (
 const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (id, name, config) 
   VALUES ($1, $2, $3)
-  RETURNING id, name, config
+  RETURNING id, name, curr_build_id, config
 `
 
 type CreateWorkflowParams struct {
@@ -24,7 +24,12 @@ type CreateWorkflowParams struct {
 func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error) {
 	row := q.db.QueryRow(ctx, createWorkflow, arg.ID, arg.Name, arg.Config)
 	var i Workflow
-	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrBuildID,
+		&i.Config,
+	)
 	return i, err
 }
 
@@ -33,7 +38,7 @@ UPDATE workflows
   SET name = $2,
     config = $3
   WHERE id = $1
-  RETURNING id, name, config
+  RETURNING id, name, curr_build_id, config
 `
 
 type UpdateWorkflowParams struct {
@@ -45,46 +50,85 @@ type UpdateWorkflowParams struct {
 func (q *Queries) UpdateWorkflow(ctx context.Context, arg UpdateWorkflowParams) (Workflow, error) {
 	row := q.db.QueryRow(ctx, updateWorkflow, arg.ID, arg.Name, arg.Config)
 	var i Workflow
-	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrBuildID,
+		&i.Config,
+	)
+	return i, err
+}
+
+const updateWorkflowCurrentBuild = `-- name: UpdateWorkflowCurrentBuild :one
+UPDATE workflows
+  SET curr_build_id = $2
+  WHERE id = $1
+  RETURNING id, name, curr_build_id, config
+`
+
+type UpdateWorkflowCurrentBuildParams struct {
+	ID          string
+	CurrBuildID string
+}
+
+func (q *Queries) UpdateWorkflowCurrentBuild(ctx context.Context, arg UpdateWorkflowCurrentBuildParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, updateWorkflowCurrentBuild, arg.ID, arg.CurrBuildID)
+	var i Workflow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrBuildID,
+		&i.Config,
+	)
 	return i, err
 }
 
 const workflow = `-- name: Workflow :one
-SELECT id, name, config FROM workflows
+SELECT id, name, curr_build_id, config FROM workflows
   WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) Workflow(ctx context.Context, id string) (Workflow, error) {
 	row := q.db.QueryRow(ctx, workflow, id)
 	var i Workflow
-	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrBuildID,
+		&i.Config,
+	)
 	return i, err
 }
 
 const workflowByName = `-- name: WorkflowByName :one
-SELECT id, name, config FROM workflows
+SELECT id, name, curr_build_id, config FROM workflows
   WHERE name = $1 LIMIT 1
 `
 
 func (q *Queries) WorkflowByName(ctx context.Context, name string) (Workflow, error) {
 	row := q.db.QueryRow(ctx, workflowByName, name)
 	var i Workflow
-	err := row.Scan(&i.ID, &i.Name, &i.Config)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrBuildID,
+		&i.Config,
+	)
 	return i, err
 }
 
 const workflows = `-- name: Workflows :many
-SELECT id, name, config FROM workflows 
-  OFFSET $1 LIMIT $2
+SELECT id, name, curr_build_id, config FROM workflows 
+  LIMIT $1 OFFSET $2
 `
 
 type WorkflowsParams struct {
-	Offset int32
 	Limit  int32
+	Offset int32
 }
 
 func (q *Queries) Workflows(ctx context.Context, arg WorkflowsParams) ([]Workflow, error) {
-	rows, err := q.db.Query(ctx, workflows, arg.Offset, arg.Limit)
+	rows, err := q.db.Query(ctx, workflows, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +136,12 @@ func (q *Queries) Workflows(ctx context.Context, arg WorkflowsParams) ([]Workflo
 	var items []Workflow
 	for rows.Next() {
 		var i Workflow
-		if err := rows.Scan(&i.ID, &i.Name, &i.Config); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrBuildID,
+			&i.Config,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

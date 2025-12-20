@@ -18,18 +18,15 @@ var (
 type Engine struct {
 	bus events.Bus
 
-	workflows *db.WorkflowFactory
-	builds    *db.BuildFactory
-	jobs      *db.JobFactory
-	tasks     *db.TaskFactory
+	builds *db.BuildFactory
+	jobs   *db.JobFactory
+	tasks  *db.TaskFactory
 
-	planner  Planner
 	watchers []*watcher.Watcher
 }
 
 func New(
 	bus events.Bus,
-	workflows *db.WorkflowFactory,
 	builds *db.BuildFactory,
 	jobs *db.JobFactory,
 	tasks *db.TaskFactory,
@@ -37,12 +34,10 @@ func New(
 	return &Engine{
 		bus: bus,
 
-		workflows: workflows,
-		builds:    builds,
-		jobs:      jobs,
-		tasks:     tasks,
+		builds: builds,
+		jobs:   jobs,
+		tasks:  tasks,
 
-		planner: NewPlanner(),
 		watchers: []*watcher.Watcher{
 			watcher.NewWatcher(bus, NewBuildProcessor(builds, jobs, bus)),
 			watcher.NewWatcher(bus, NewJobProcessor(jobs, tasks, bus)),

@@ -159,7 +159,10 @@ type ChangeStatus struct {
 	Status      status.Status `json:"status"`
 }
 
-type BuildStatus ChangeStatus
+type BuildStatus struct {
+	ChangeStatus `json:",inline"`
+	WorkflowID   string `json:"workflowId"`
+}
 
 func (BuildStatus) Type() EventType { return EventTypeBuildStatus }
 

@@ -6,6 +6,7 @@ socket_io:
   namespace: "/"
 
 runtime:
-  address: "/var/run/containerd.sock"
+  address: "/var/run/containerd/containerd.sock"
+  namespace: "minici"
   snapshotter: "overlayfs"
   data_store_path: "/var/lib/minici"

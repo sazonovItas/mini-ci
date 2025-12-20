@@ -1,5 +1,5 @@
 ARG BUILD_BASE_IMAGE="golang:1.25-bookworm"
-ARG LOCAL_BASE_IMAGE="minici/worker:base"
+ARG LOCAL_BASE_IMAGE="minici/base:local"
 FROM ${BUILD_BASE_IMAGE} AS build
 
 WORKDIR /src
@@ -19,6 +19,6 @@ FROM ${LOCAL_BASE_IMAGE} AS local
 
 COPY --from=build /src/bin/worker /usr/local/bin/minici-worker
 
-COPY deploy/minici-worker.service /etc/systemd/system/minici-worker.service
+COPY deploy/local/minici-worker.service /etc/systemd/system/minici-worker.service
 
 RUN systemctl enable minici-worker

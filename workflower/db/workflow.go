@@ -2,11 +2,89 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 
+	"github.com/sazonovItas/mini-ci/core/status"
 	"github.com/sazonovItas/mini-ci/workflower/db/gen/psql"
 	"github.com/sazonovItas/mini-ci/workflower/model"
 )
+
+type WorkflowRepository struct {
+	queries *Queries
+}
+
+func NewWorkflowRepository(queries *Queries) *WorkflowRepository {
+	return &WorkflowRepository{queries: queries}
+}
+
+func (r *WorkflowRepository) Workflows(ctx context.Context, offset, limit int) ([]model.Workflow, error) {
+	const (
+		defaultLimit = 10
+	)
+
+	queries := r.queries.Queries(ctx)
+
+	if limit == 0 {
+		limit = defaultLimit
+	}
+
+	dbWorkflows, err := queries.Workflows(
+		ctx,
+		psql.WorkflowsParams{
+			Offset: int32(offset),
+			Limit:  int32(limit),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	workflows := make([]model.Workflow, 0, len(dbWorkflows))
+	for _, w := range dbWorkflows {
+		var config model.WorkflowConfig
+		if err := json.Unmarshal(w.Config, &config); err != nil {
+			return nil, err
+		}
+
+		workflow := model.Workflow{
+			ID:     w.ID,
+			Name:   w.Name,
+			Config: config,
+		}
+
+		workflows = append(workflows, workflow)
+	}
+
+	err = r.queries.WithTx(ctx, func(txCtx context.Context) error {
+		queries := r.queries.Queries(txCtx)
+
+		for i := range workflows {
+			build, err := queries.Build(txCtx, dbWorkflows[i].CurrBuildID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+
+				return err
+			}
+
+			workflows[i].CurrBuild = &model.Build{
+				ID:         build.ID,
+				WorkflowID: build.WorkflowID,
+				Status:     status.Status(build.Status),
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return workflows, nil
+}
 
 type WorkflowFactory struct {
 	queries *Queries
@@ -71,6 +149,16 @@ func newWorkflow(w psql.Workflow, q *Queries) *workflow {
 
 type Workflow interface {
 	Transactor
+
+	ID() string
+	Name() string
+	CurrBuildID() string
+	Config() model.WorkflowConfig
+	Model() model.Workflow
+
+	Update(ctx context.Context, workflow model.Workflow) error
+	UpdateCurrentBuild(ctx context.Context, buildID string) error
+	Builds(ctx context.Context) ([]Build, error)
 }
 
 type workflow struct {
@@ -85,6 +173,10 @@ func (w *workflow) ID() string {
 
 func (w *workflow) Name() string {
 	return w.Workflow.Name
+}
+
+func (w *workflow) CurrBuildID() string {
+	return w.Workflow.CurrBuildID
 }
 
 func (w *workflow) Config() model.WorkflowConfig {
@@ -124,6 +216,42 @@ func (w *workflow) Update(ctx context.Context, workflow model.Workflow) error {
 	w.Workflow = updatedWorkflow
 
 	return err
+}
+
+func (w *workflow) UpdateCurrentBuild(ctx context.Context, buildID string) error {
+	queries := w.queries.Queries(ctx)
+
+	updatedWorkflow, err := queries.UpdateWorkflowCurrentBuild(
+		ctx,
+		psql.UpdateWorkflowCurrentBuildParams{
+			ID:          w.ID(),
+			CurrBuildID: buildID,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	w.Workflow = updatedWorkflow
+
+	return err
+}
+
+func (w *workflow) CurrBuild(ctx context.Context) (Build, bool, error) {
+	queries := w.queries.Queries(ctx)
+
+	dbBuild, err := queries.Build(ctx, w.CurrBuildID())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false, nil
+		}
+
+		return nil, false, err
+	}
+
+	b := newBuild(dbBuild, w.queries)
+
+	return b, true, nil
 }
 
 func (w *workflow) Builds(ctx context.Context) ([]Build, error) {

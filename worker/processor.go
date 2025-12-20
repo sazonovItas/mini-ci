@@ -77,6 +77,8 @@ func (p *EventProcessor) Wait() {
 }
 
 func (p *EventProcessor) process(ctx context.Context, ev events.Event) error {
+	log.G(ctx).Debugf("processing event %T", ev)
+
 	switch event := ev.(type) {
 	case events.InitContainerStart:
 		return p.containerInitStart(ctx, event)
@@ -166,7 +168,7 @@ func (p *EventProcessor) scriptStart(ctx context.Context, event events.ScriptSta
 	finishScript := events.ScriptFinish{
 		EventOrigin: event.Origin(),
 		ExitStatus:  exitStatus,
-		Succeeded:   exitStatus != 0,
+		Succeeded:   exitStatus == 0,
 	}
 	_ = p.Publisher.Publish(ctx, finishScript)
 

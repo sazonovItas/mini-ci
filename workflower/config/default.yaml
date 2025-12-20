@@ -1,9 +1,10 @@
 api:
   address: ":8080"
+  socket_io_endpoint: "/socket.io/"
 
 worker_io:
   address: ":8081"
   endpoint: "/socket.io/"
 
 postgres:
-  uri: postgres://local:local@localhost:5432/minici?search_path=minici&pool_max_conns=10
+  uri: postgres://local:local@localhost:5432/minici?search_path=minici&pool_max_conns=25

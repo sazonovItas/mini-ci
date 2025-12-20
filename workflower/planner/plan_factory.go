@@ -1,4 +1,4 @@
-package engine
+package planner
 
 import (
 	"errors"
@@ -17,13 +17,13 @@ var (
 	ErrEmptyScriptSet = errors.New("empty script set")
 )
 
-type Planner struct{}
+type PlanFactory struct{}
 
-func NewPlanner() Planner {
-	return Planner{}
+func NewPlanFactory() PlanFactory {
+	return PlanFactory{}
 }
 
-func (p Planner) JobPlan(cfg model.WorkflowConfig) (model.JobPlan, error) {
+func (p PlanFactory) JobPlan(cfg model.WorkflowConfig) (model.JobPlan, error) {
 	jobs := cfg.Jobs
 	if len(jobs) == 0 {
 		return model.JobPlan{}, ErrEmptyJobSet
@@ -45,7 +45,7 @@ func (p Planner) JobPlan(cfg model.WorkflowConfig) (model.JobPlan, error) {
 	return *headPlan.Next, nil
 }
 
-func (p Planner) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
+func (p PlanFactory) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
 	if len(cfg.Run.Scripts) == 0 {
 		return model.TaskPlan{}, nil
 	}
@@ -90,6 +90,6 @@ func (p Planner) TaskPlan(cfg model.JobConfig) (model.TaskPlan, error) {
 	return *headPlan, nil
 }
 
-func (p Planner) nextID() string {
+func (p PlanFactory) nextID() string {
 	return uuid.New().String()
 }

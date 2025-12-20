@@ -10,7 +10,7 @@ import (
 )
 
 const build = `-- name: Build :one
-SELECT id, workflow_id, status, config, plan, created_at FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE id = $1 LIMIT 1
 `
 
@@ -23,13 +23,12 @@ func (q *Queries) Build(ctx context.Context, id string) (Build, error) {
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const buildsByStatus = `-- name: BuildsByStatus :many
-SELECT id, workflow_id, status, config, plan, created_at FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE status = $1
 `
 
@@ -48,7 +47,6 @@ func (q *Queries) BuildsByStatus(ctx context.Context, status string) ([]Build, e
 			&i.Status,
 			&i.Config,
 			&i.Plan,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -61,9 +59,8 @@ func (q *Queries) BuildsByStatus(ctx context.Context, status string) ([]Build, e
 }
 
 const buildsByWorkflow = `-- name: BuildsByWorkflow :many
-SELECT id, workflow_id, status, config, plan, created_at FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE workflow_id = $1
-  ORDER BY created_at DESC
 `
 
 func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Build, error) {
@@ -81,7 +78,6 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 			&i.Status,
 			&i.Config,
 			&i.Plan,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -96,7 +92,7 @@ func (q *Queries) BuildsByWorkflow(ctx context.Context, workflowID string) ([]Bu
 const createBuild = `-- name: CreateBuild :one
 INSERT INTO builds (id, workflow_id, status, config, plan) 
   VALUES ($1, $2, $3, $4, $5)
-  RETURNING id, workflow_id, status, config, plan, created_at
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type CreateBuildParams struct {
@@ -122,7 +118,6 @@ func (q *Queries) CreateBuild(ctx context.Context, arg CreateBuildParams) (Build
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -130,7 +125,7 @@ func (q *Queries) CreateBuild(ctx context.Context, arg CreateBuildParams) (Build
 const createEmptyBuild = `-- name: CreateEmptyBuild :one
 INSERT INTO builds (id, workflow_id, status) 
   VALUES ($1, $2, $3)
-  RETURNING id, workflow_id, status, config, plan, created_at
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type CreateEmptyBuildParams struct {
@@ -148,13 +143,12 @@ func (q *Queries) CreateEmptyBuild(ctx context.Context, arg CreateEmptyBuildPara
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const lockBuild = `-- name: LockBuild :one
-SELECT id, workflow_id, status, config, plan, created_at FROM builds
+SELECT id, workflow_id, status, config, plan FROM builds
   WHERE id = $1 LIMIT 1
   FOR UPDATE
 `
@@ -168,7 +162,6 @@ func (q *Queries) LockBuild(ctx context.Context, id string) (Build, error) {
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -178,7 +171,7 @@ UPDATE builds
   set status = $2,
     plan = $3
   WHERE id = $1
-  RETURNING id, workflow_id, status, config, plan, created_at
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type UpdateBuildParams struct {
@@ -196,7 +189,6 @@ func (q *Queries) UpdateBuild(ctx context.Context, arg UpdateBuildParams) (Build
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -205,7 +197,7 @@ const updateBuildStatus = `-- name: UpdateBuildStatus :one
 UPDATE builds
   SET status = $2
   WHERE id = $1
-  RETURNING id, workflow_id, status, config, plan, created_at
+  RETURNING id, workflow_id, status, config, plan
 `
 
 type UpdateBuildStatusParams struct {
@@ -222,7 +214,6 @@ func (q *Queries) UpdateBuildStatus(ctx context.Context, arg UpdateBuildStatusPa
 		&i.Status,
 		&i.Config,
 		&i.Plan,
-		&i.CreatedAt,
 	)
 	return i, err
 }

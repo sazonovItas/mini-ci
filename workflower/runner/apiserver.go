@@ -2,35 +2,52 @@ package runner
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/sazonovItas/mini-ci/core/events"
+	"github.com/sazonovItas/mini-ci/workflower/api"
+	"github.com/sazonovItas/mini-ci/workflower/db"
 )
 
 type APIServerConfig struct {
-	Address string
+	Address          string
+	SocketIOEndpoint string
 }
 
 type APIServer struct {
-	bus events.Bus
-
-	httpServer *HTTPServer
+	httpServer    *HTTPServer
+	eventsGateway *EventsGateway
 
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-func NewAPIServer(bus events.Bus, cfg APIServerConfig) *APIServer {
-	// TODO: add handler for api server
-	httpServer := NewHTTPServer(cfg.Address, nil)
+func NewAPIServer(
+	db *db.DB,
+	bus events.Bus,
+	cfg APIServerConfig,
+) *APIServer {
+	apiHandler := api.New(db, bus)
+	eventsGateway := NewEventGateway(bus)
+
+	mux := http.NewServeMux()
+
+	apiHandler.RegisterRoutes(mux)
+
+	mux.Handle(cfg.SocketIOEndpoint, eventsGateway.Handler())
+
+	httpServer := NewHTTPServer(cfg.Address, mux)
 
 	return &APIServer{
-		bus:        bus,
-		httpServer: httpServer,
+		httpServer:    httpServer,
+		eventsGateway: eventsGateway,
 	}
 }
 
 func (r *APIServer) Start(ctx context.Context) {
 	r.ctx, r.cancel = context.WithCancel(ctx)
+
+	r.eventsGateway.Start(r.ctx)
 
 	r.httpServer.Start(r.ctx)
 }
@@ -39,4 +56,5 @@ func (r *APIServer) Stop(ctx context.Context) {
 	r.cancel()
 
 	r.httpServer.Stop(ctx)
+	r.eventsGateway.Stop(ctx)
 }

@@ -8,8 +8,9 @@ type DB struct {
 	jobs      *JobFactory
 	tasks     *TaskFactory
 
-	event   *EventRepository
-	taskLog *TaskLogRepository
+	event    *EventRepository
+	taskLog  *TaskLogRepository
+	workflow *WorkflowRepository
 }
 
 func New(pool *pgxpool.Pool) *DB {
@@ -22,6 +23,7 @@ func New(pool *pgxpool.Pool) *DB {
 		tasks:     NewTaskFactory(queries),
 		event:     NewEventRepository(queries),
 		taskLog:   NewTaskLogRepository(queries),
+		workflow:  NewWorkflowRepository(queries),
 	}
 }
 
@@ -47,4 +49,8 @@ func (db *DB) EventRepository() *EventRepository {
 
 func (db *DB) TaskLogRepository() *TaskLogRepository {
 	return db.taskLog
+}
+
+func (db *DB) WorkflowRepository() *WorkflowRepository {
+	return db.workflow
 }

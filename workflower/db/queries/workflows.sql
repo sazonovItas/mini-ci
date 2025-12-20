@@ -8,7 +8,7 @@ SELECT * FROM workflows
 
 -- name: Workflows :many
 SELECT * FROM workflows 
-  OFFSET $1 LIMIT $2;
+  LIMIT $1 OFFSET $2;
 
 -- name: CreateWorkflow :one
 INSERT INTO workflows (id, name, config) 
@@ -19,5 +19,11 @@ INSERT INTO workflows (id, name, config)
 UPDATE workflows
   SET name = $2,
     config = $3
+  WHERE id = $1
+  RETURNING *;
+
+-- name: UpdateWorkflowCurrentBuild :one
+UPDATE workflows
+  SET curr_build_id = $2
   WHERE id = $1
   RETURNING *;

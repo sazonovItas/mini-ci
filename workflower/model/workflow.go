@@ -1,9 +1,10 @@
 package model
 
 type Workflow struct {
-	ID     string         `json:"id"`
-	Name   string         `json:"name"`
-	Config WorkflowConfig `json:"config"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	CurrBuild *Build         `json:"currBuild"`
+	Config    WorkflowConfig `json:"config"`
 }
 
 type WorkflowConfig struct {

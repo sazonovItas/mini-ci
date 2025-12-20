@@ -3,29 +3,58 @@ networks:
 
 services:
   db:
-    image: timescale/timescaledb:${TIMESCALE_TAG:-"latest-pg17"}
+    image: docker.io/timescale/timescaledb:${TIMESCALE_TAG:-latest-pg17}
+    restart: unless-stopped
     ports:
       - 5432:5432
+    networks:
+      - default
     environment:
       POSTGRES_DB: minici
       POSTGRES_USER: local
       POSTGRES_PASSWORD: local
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dev -d minici"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -h db -U local -d minici"]
+      interval: 15s
       timeout: 5s
       retries: 5
+
+  migrate:
+    image: docker.io/migrate/migrate:v4.19.1
+    restart: on-failure
+    command: -path /migrations -database postgres://local:local@db:5432/minici?sslmode=disable up
+    volumes:
+      - ./workflower/db/migrations:/migrations
+    networks:
+      - default
+    depends_on:
+      - db
+
+  workflower:
+    build:
+      context: .
+      dockerfile: build/local/Dockerfile.workflower
+    image: minici/workflower:local
+    restart: always
+    ports:
+      - 8080:8080
+    networks:
+      - default
+    environment:
+      - MINICI_POSTGRES_URI=postgres://local:local@db:5432/minici?search_path=minici&pool_max_conns=25
+    depends_on:
+      - db
 
   worker:
     build:
       context: .
-      dockerfile: build/Dockerfile.worker-local
+      dockerfile: build/local/Dockerfile.worker
     image: minici/worker:local
     privileged: true
-    cgroup: host
     networks:
       - default
-    environment:
-      - MINICI_WORKER_NAME="local"
-      - MINICI_WORKER_SOCKET_IO_URL="http://0.0.0.0:8081/socket.io/"
-      - MINICI_WORKER_RUNTIME_SNAPSHOTTER="fuse-overlayfs"
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    depends_on:
+      - workflower

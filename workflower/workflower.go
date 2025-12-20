@@ -8,6 +8,7 @@ import (
 	"github.com/sazonovItas/mini-ci/core/events/exchange"
 	"github.com/sazonovItas/mini-ci/workflower/config"
 	pgdb "github.com/sazonovItas/mini-ci/workflower/db"
+	"github.com/sazonovItas/mini-ci/workflower/engine"
 	"github.com/sazonovItas/mini-ci/workflower/runner"
 )
 
@@ -16,6 +17,8 @@ type Workflower struct {
 	apiServer  *runner.APIServer
 	logSaver   *runner.TaskLogSaver
 	eventSaver *runner.EventSaver
+
+	engine *engine.Engine
 
 	db  *pgdb.DB
 	bus *exchange.Exchange
@@ -43,9 +46,11 @@ func New(cfg config.Config) (*Workflower, error) {
 	)
 
 	apiServer := runner.NewAPIServer(
+		db,
 		bus,
 		runner.APIServerConfig{
-			Address: cfg.API.Address,
+			Address:          cfg.API.Address,
+			SocketIOEndpoint: cfg.API.SocketIOEndpoint,
 		},
 	)
 
@@ -53,11 +58,19 @@ func New(cfg config.Config) (*Workflower, error) {
 
 	eventSaver := runner.NewEventSaver(bus, db.EventRepository())
 
+	engine := engine.New(
+		bus,
+		db.BuildFactory(),
+		db.JobFactory(),
+		db.TaskFactory(),
+	)
+
 	workflower := &Workflower{
 		apiServer:  apiServer,
 		workerIO:   workerIO,
 		logSaver:   logSaver,
 		eventSaver: eventSaver,
+		engine:     engine,
 
 		bus:    bus,
 		db:     db,
@@ -68,6 +81,7 @@ func New(cfg config.Config) (*Workflower, error) {
 }
 
 func (w *Workflower) Start(ctx context.Context) {
+	w.wg.Go(func() { w.engine.Start(ctx) })
 	w.wg.Go(func() { w.logSaver.Start(ctx) })
 	w.wg.Go(func() { w.eventSaver.Start(ctx) })
 	w.wg.Go(func() { w.workerIO.Start(ctx) })
@@ -79,6 +93,7 @@ func (w *Workflower) Stop(ctx context.Context) {
 	w.wg.Go(func() { w.workerIO.Stop(ctx) })
 	w.wg.Go(func() { w.logSaver.Stop(ctx) })
 	w.wg.Go(func() { w.eventSaver.Stop(ctx) })
+	w.wg.Go(func() { w.engine.Stop() })
 
 	w.wg.Wait()
 

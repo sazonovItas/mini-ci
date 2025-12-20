@@ -8,10 +8,6 @@ import (
 	"github.com/sazonovItas/mini-ci/workflower/db/gen/psql"
 )
 
-const (
-	defaultTaskLogLimit int = 20
-)
-
 type TaskLogRepository struct {
 	queries *Queries
 }
@@ -42,11 +38,15 @@ func (r *TaskLogRepository) Save(ctx context.Context, taskID string, logs ...eve
 	})
 }
 
-func (r *TaskLogRepository) LastTaskLogs(ctx context.Context, taskID string, limit int) ([]events.LogMessage, error) {
+func (r *TaskLogRepository) LastLogs(ctx context.Context, taskID string, offset, limit int) ([]events.LogMessage, error) {
+	const (
+		defaultLimit int = 100
+	)
+
 	queries := r.queries.Queries(ctx)
 
 	if limit == 0 {
-		limit = defaultTaskLogLimit
+		limit = defaultLimit
 	}
 
 	dbLogs, err := queries.LastTaskLogsWithLimit(
@@ -54,6 +54,7 @@ func (r *TaskLogRepository) LastTaskLogs(ctx context.Context, taskID string, lim
 		psql.LastTaskLogsWithLimitParams{
 			TaskID: taskID,
 			Limit:  int32(limit),
+			Offset: int32(offset),
 		},
 	)
 	if err != nil {
@@ -68,11 +69,15 @@ func (r *TaskLogRepository) LastTaskLogs(ctx context.Context, taskID string, lim
 	return logs, nil
 }
 
-func (r *TaskLogRepository) TaskLogsSince(ctx context.Context, taskID string, since time.Time, limit int) ([]events.LogMessage, error) {
+func (r *TaskLogRepository) LogsSince(ctx context.Context, taskID string, since time.Time, limit int) ([]events.LogMessage, error) {
+	const (
+		defaultLimit int = 100
+	)
+
 	queries := r.queries.Queries(ctx)
 
 	if limit == 0 {
-		limit = defaultTaskLogLimit
+		limit = defaultLimit
 	}
 
 	dbLogs, err := queries.TaskLogsSinceWithLimit(

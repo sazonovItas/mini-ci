@@ -1,4 +1,4 @@
-BASE_IMAGE ?= minici/worker:base
+BASE_IMAGE ?= minici/base:local
 BASE_DOCKERFILE ?= Dockerfile.base
 
 GO_VERSION ?= 1.25.0

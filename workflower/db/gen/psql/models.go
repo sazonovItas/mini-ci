@@ -6,8 +6,6 @@ package psql
 
 import (
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Build struct {
@@ -16,7 +14,6 @@ type Build struct {
 	Status     string
 	Config     []byte
 	Plan       []byte
-	CreatedAt  pgtype.Timestamp
 }
 
 type Event struct {
@@ -50,7 +47,8 @@ type TaskLog struct {
 }
 
 type Workflow struct {
-	ID     string
-	Name   string
-	Config []byte
+	ID          string
+	Name        string
+	CurrBuildID string
+	Config      []byte
 }

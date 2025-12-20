@@ -32,12 +32,16 @@ func main() {
 		panic(err)
 	}
 
+	log.G(context.TODO()).Debug(cfg)
+
 	worker, err := worker.New(cfg)
 	if err != nil {
 		panic(err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	ctx, stop := signal.NotifyContext(
+		context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT,
+	)
 	defer stop()
 
 	if err := worker.Start(ctx); err != nil {

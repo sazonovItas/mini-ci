@@ -43,7 +43,7 @@ func (e *Exchange) Publish(ctx context.Context, event events.Event) (err error) 
 
 func (e *Exchange) Subscribe(ctx context.Context, filters ...events.FilterFunc) (ch <-chan events.Event, errs <-chan error) {
 	var (
-		evch    = make(chan events.Event)
+		evch    = make(chan events.Event, 100)
 		errq    = make(chan error, 1)
 		channel = goevents.NewChannel(0)
 		queue   = goevents.NewQueue(channel)
@@ -76,25 +76,24 @@ func (e *Exchange) Subscribe(ctx context.Context, filters ...events.FilterFunc) 
 					break
 				}
 
+				filtered := true
 				if len(filters) > 0 {
-					var filtered bool
 					for _, filter := range filters {
 						if !filter(ev) {
-							filtered = true
+							filtered = false
 							break
 						}
 					}
+				}
 
-					if filtered {
-						break
+				if filtered {
+					select {
+					case evch <- ev:
+					case <-ctx.Done():
+						break loop
 					}
 				}
 
-				select {
-				case evch <- ev:
-				case <-ctx.Done():
-					break loop
-				}
 			case <-ctx.Done():
 				break loop
 			}

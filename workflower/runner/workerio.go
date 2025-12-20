@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/containerd/log"
@@ -17,7 +18,7 @@ import (
 const (
 	workerEventName     = "message"
 	queueDiscardTimeout = 250 * time.Millisecond
-	requeueTimeout      = 1 * time.Second
+	requeueTimeout      = 5 * time.Second
 )
 
 type WorkerIOConfig struct {
@@ -31,8 +32,9 @@ type WorkerIO struct {
 	ioServer   *socket.Server
 	httpServer *HTTPServer
 
-	recvq eventq.Queue[events.Event]
-	sendq eventq.Queue[events.Event]
+	connected atomic.Bool
+	recvq     eventq.Queue[events.Event]
+	sendq     eventq.Queue[events.Event]
 
 	wg     sync.WaitGroup
 	ctx    context.Context
@@ -41,8 +43,8 @@ type WorkerIO struct {
 
 func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 	opts := socket.DefaultServerOptions()
-	opts.SetPingTimeout(20 * time.Second)
-	opts.SetPingInterval(25 * time.Second)
+	opts.SetPingTimeout(10 * time.Minute)
+	opts.SetPingInterval(3 * time.Second)
 	opts.SetMaxHttpBufferSize(1e6)
 
 	ioServer := socket.NewServer(nil, opts)
@@ -52,6 +54,7 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 	httpServer := NewHTTPServer(cfg.Address, handler)
 
 	runner := &WorkerIO{
+		bus:        bus,
 		ioServer:   ioServer,
 		httpServer: httpServer,
 		recvq:      eventq.New(queueDiscardTimeout, func(events.Event) {}),
@@ -63,7 +66,6 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 			log.G(runner.ctx).Debug("worker connected")
 
 			worker := workers[0].(*socket.Socket)
-			workerCtx, workerCancel := context.WithCancel(runner.ctx)
 
 			_ = worker.On(workerEventName, func(msgs ...any) {
 				if len(msgs) == 0 {
@@ -72,13 +74,13 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 
 				jsonMessage, err := json.Marshal(msgs[0])
 				if err != nil {
-					log.G(workerCtx).WithError(err).Error("failed to marshal recieved message")
+					log.G(runner.ctx).WithError(err).Error("failed to marshal recieved message")
 					return
 				}
 
 				var message events.Message
 				if err := json.Unmarshal(jsonMessage, &message); err != nil {
-					log.G(workerCtx).WithError(err).Error("failed to unmarshal recieved message into event")
+					log.G(runner.ctx).WithError(err).Error("failed to unmarshal recieved message into event")
 					return
 				}
 
@@ -86,11 +88,11 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 			})
 
 			_ = worker.On("disconnect", func(msgs ...any) {
+				runner.connected.Store(false)
 				log.G(runner.ctx).Debug("worker disconnected")
-				workerCancel()
 			})
 
-			runner.wg.Go(func() { runner.startSender(workerCtx, worker) })
+			runner.connected.Store(true)
 		})
 
 	return runner
@@ -99,8 +101,9 @@ func NewWorkerIO(bus events.Bus, cfg WorkerIOConfig) *WorkerIO {
 func (r *WorkerIO) Start(ctx context.Context) {
 	r.ctx, r.cancel = context.WithCancel(ctx)
 
-	r.wg.Go(func() { r.startReceiver(ctx) })
-	r.wg.Go(func() { r.startBusForwarder(ctx) })
+	r.wg.Go(func() { r.startSender(r.ctx) })
+	r.wg.Go(func() { r.startReceiver(r.ctx) })
+	r.wg.Go(func() { r.startBusForwarder(r.ctx) })
 
 	r.httpServer.Start(r.ctx)
 }
@@ -134,7 +137,7 @@ func (r *WorkerIO) startBusForwarder(ctx context.Context) {
 	evch, errs := r.bus.Subscribe(
 		ctx,
 		events.WithEventTypes(
-			events.EventTypeInitContainerFinish,
+			events.EventTypeInitContainerStart,
 			events.EventTypeScriptStart,
 			events.EventTypeScriptAbort,
 			events.EventTypeCleanupContainer,
@@ -187,7 +190,7 @@ func (r *WorkerIO) startReceiver(ctx context.Context) {
 	}
 }
 
-func (r *WorkerIO) startSender(ctx context.Context, worker *socket.Socket) {
+func (r *WorkerIO) startSender(ctx context.Context) {
 	evch, closer := r.sendq.Subscribe()
 	defer func() {
 		_ = closer.Close()
@@ -204,8 +207,9 @@ func (r *WorkerIO) startSender(ctx context.Context, worker *socket.Socket) {
 				return
 			}
 
-			if err := worker.Emit(workerEventName, events.Message{Event: event}); err != nil {
-				log.G(ctx).WithError(err).Error("failed to send message to worker")
+			if r.connected.Load() {
+				r.ioServer.Emit(workerEventName, events.Message{Event: event})
+			} else {
 				go events.PublishAfter(ctx, r, event, requeueTimeout)
 			}
 		}

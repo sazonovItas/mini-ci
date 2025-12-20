@@ -14,11 +14,12 @@ type Config struct {
 }
 
 type APIConfig struct {
-	Address string `yaml:"address" mapstructure:"address"`
+	Address          string `yaml:"address" mapstructure:"address"`
+	SocketIOEndpoint string `yaml:"socket_io_endpoint" mapstructure:"socket_io_endpoint"`
 }
 
 type WorkerIOConfig struct {
-	Addresss string `yaml:"addresss" mapstructure:"addresss"`
+	Addresss string `yaml:"address" mapstructure:"address"`
 	Endpoint string `yaml:"endpoint" mapstructure:"endpoint"`
 }
 
