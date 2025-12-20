@@ -46,7 +46,7 @@ func (p TaskProcessor) ProcessEvent(ctx context.Context, event events.Event) (er
 		err = p.scriptFinish(ctx, e)
 
 	case events.TaskError:
-		err = p.error(ctx, e)
+		err = p.taskError(ctx, e)
 
 	case events.TaskAbort:
 		err = p.taskAbort(ctx, e)
@@ -131,6 +131,10 @@ func (p TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFini
 			finishStatus = status.StatusFailed
 		}
 
+		if task.Status().IsAborted() {
+			finishStatus = task.Status()
+		}
+
 		err = task.Finish(txCtx, finishStatus)
 		if err != nil {
 			return err
@@ -145,7 +149,7 @@ func (p TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFini
 	})
 }
 
-func (p TaskProcessor) error(ctx context.Context, event events.TaskError) error {
+func (p TaskProcessor) taskError(ctx context.Context, event events.TaskError) error {
 	return p.tasks.WithTx(ctx, func(txCtx context.Context) error {
 		task, found, err := p.tasks.Task(ctx, event.Origin().ID)
 		if err != nil {
@@ -154,6 +158,10 @@ func (p TaskProcessor) error(ctx context.Context, event events.TaskError) error 
 
 		if !found {
 			return ErrTaskNotFound
+		}
+
+		if task.Status().IsFinished() {
+			return nil
 		}
 
 		// err = task.Lock(txCtx)
@@ -298,7 +306,7 @@ func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) er
 			return err
 		}
 
-		err = p.publishStatusChanged(ctx, task.Model())
+		err = p.publishStatusChanged(txCtx, task.Model())
 		if err != nil {
 			return err
 		}
@@ -310,7 +318,10 @@ func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) er
 func (p TaskProcessor) abortStep(ctx context.Context, taskID string, step model.StepConfig) (err error) {
 	switch config := step.(type) {
 	case *model.ScriptStep:
-		err = p.publish(ctx, events.ScriptAbort{EventOrigin: events.NewEventOrigin(taskID)})
+		err = p.publish(ctx, events.ScriptAbort{
+			EventOrigin: events.NewEventOrigin(taskID),
+			ContainerID: config.ContainerID,
+		})
 	default:
 		log.G(ctx).Debugf("cannot abort task with step type %T", config)
 	}

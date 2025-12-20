@@ -6,6 +6,8 @@ package psql
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Build struct {
@@ -14,6 +16,7 @@ type Build struct {
 	Status     string
 	Config     []byte
 	Plan       []byte
+	CreatedAt  pgtype.Timestamp
 }
 
 type Event struct {

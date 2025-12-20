@@ -224,16 +224,6 @@ func (p BuildProcessor) buildAbort(ctx context.Context, event events.BuildAbort)
 			}
 		}
 
-		err = build.Finish(txCtx, status.StatusAborted)
-		if err != nil {
-			return err
-		}
-
-		err = p.publishStatusChanged(txCtx, build.Model())
-		if err != nil {
-			return err
-		}
-
 		return nil
 	})
 }

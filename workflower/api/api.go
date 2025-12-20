@@ -38,6 +38,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	r.HandleFunc("GET /api/workflows/{id}/builds", a.listBuilds)
 	r.HandleFunc("POST /api/workflows/{id}/builds", a.startBuild)
 	r.HandleFunc("GET /api/builds/{id}", a.getBuild)
+	r.HandleFunc("POST /api/builds/{id}/abort", a.abortBuild)
 
 	// Jobs
 	r.HandleFunc("GET /api/builds/{id}/jobs", a.listJobs)

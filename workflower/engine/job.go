@@ -240,16 +240,6 @@ func (p JobProcessor) jobAbort(ctx context.Context, event events.JobAbort) error
 			}
 		}
 
-		err = job.Finish(txCtx, status.StatusAborted)
-		if err != nil {
-			return err
-		}
-
-		err = p.publishStatusChanged(ctx, job.Model())
-		if err != nil {
-			return err
-		}
-
 		return nil
 	})
 }

@@ -104,6 +104,6 @@ func (a *API) getTaskLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logs, err := a.db.TaskLogRepository().Logs(r.Context(), id, offset, limit)
+	logs, err := a.db.TaskLogRepository().LastLogs(r.Context(), id, offset, limit)
 	respond(w, logs, err)
 }

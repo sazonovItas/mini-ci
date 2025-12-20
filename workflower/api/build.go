@@ -79,6 +79,37 @@ func (a *API) startBuild(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, planOutput.Build)
 }
 
+func (a *API) abortBuild(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	ctx := r.Context()
+
+	build, found, err := a.db.BuildFactory().Build(ctx, id)
+	if err != nil {
+		respondError(w, err)
+		return
+	}
+	if !found {
+		respondErrorMessage(w, http.StatusNotFound, "Build not found")
+		return
+	}
+
+	if build.Status().IsFinished() {
+		respondErrorMessage(w, http.StatusConflict, "Build is already finished")
+		return
+	}
+
+	err = a.publisher.Publish(ctx, events.BuildAbort{
+		EventOrigin: events.NewEventOrigin(build.ID()),
+	})
+	if err != nil {
+		log.G(ctx).WithError(err).Error("failed to publish build abort event")
+		respondError(w, err)
+		return
+	}
+
+	respondJSON(w, build.Model())
+}
+
 func (a *API) listBuilds(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	wf, err := a.db.WorkflowFactory().Workflow(r.Context(), id)

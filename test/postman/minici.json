@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "b5a9c8e2-4d1a-4f8b-9e1c-2f3d4a5b6c7d",
     "name": "Mini-CI API",
-    "description": "Collection for testing the Mini-CI Workflower API. Run requests in order to automatically populate variables.",
+    "description": "Collection for testing the Mini-CI Workflower API, including Abort scenarios.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -344,6 +344,149 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "5. Abort Scenario",
+      "item": [
+        {
+          "name": "Create Sleep Workflow",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"sleepWorkflowId\", jsonData.id);",
+                  "console.log(\"Sleep Workflow ID set to:\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Infinite Sleep Workflow\",\n  \"config\": {\n    \"jobs\": [\n      {\n        \"name\": \"sleep-job\",\n        \"run\": {\n          \"image\": \"docker.io/library/alpine:latest\",\n          \"scripts\": [\n            {\n              \"name\": \"sleep-forever\",\n              \"command\": [\"sleep\", \"3600\"]\n            }\n          ]\n        }\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workflows"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Sleep Build",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"sleepBuildId\", jsonData.id);",
+                  "console.log(\"Sleep Build ID set to:\", jsonData.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/workflows/{{sleepWorkflowId}}/builds",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "workflows",
+                "{{sleepWorkflowId}}",
+                "builds"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Abort Build",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/{{sleepBuildId}}/abort",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "{{sleepBuildId}}",
+                "abort"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Build (Check Status)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "// Status might still be 'aborted' or transitioning depending on worker speed",
+                  "console.log(\"Current Build Status:\", jsonData.status);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/builds/{{sleepBuildId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "builds",
+                "{{sleepBuildId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -366,6 +509,14 @@
     },
     {
       "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "sleepWorkflowId",
+      "value": ""
+    },
+    {
+      "key": "sleepBuildId",
       "value": ""
     }
   ]
