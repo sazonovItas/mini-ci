@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/sazonovItas/mini-ci/core/events"
@@ -96,5 +97,5 @@ func (l *eventLogger) sendMessages(messages []events.LogMessage) {
 }
 
 func (l *eventLogger) newLogMessage(msg string) events.LogMessage {
-	return events.LogMessage{Msg: msg, Time: time.Now().UTC()}
+	return events.LogMessage{Msg: strings.TrimSuffix(msg, "\n"), Time: time.Now().UTC()}
 }
