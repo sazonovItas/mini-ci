@@ -86,6 +86,16 @@ func (r *WorkflowRepository) Workflows(ctx context.Context, offset, limit int) (
 	return workflows, nil
 }
 
+func (r *WorkflowRepository) Delete(ctx context.Context, id string) error {
+	queries := r.queries.Queries(ctx)
+
+	if err := queries.DeleteWorkflow(ctx, id); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 type WorkflowFactory struct {
 	queries *Queries
 }

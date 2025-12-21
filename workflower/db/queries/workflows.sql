@@ -27,3 +27,7 @@ UPDATE workflows
   SET curr_build_id = $2
   WHERE id = $1
   RETURNING *;
+
+-- name: DeleteWorkflow :exec
+DELETE FROM workflows
+  WHERE id = $1;

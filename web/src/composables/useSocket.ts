@@ -9,26 +9,31 @@ export function useSocket() {
       transports: ["websocket"],
       withCredentials: true,
     });
+
+    socket.value.on("connect", () => console.log("Socket Connected"));
   }
 
-  /**
-   * Listens to an event and returns an unsubscribe function.
-   * Auto-cleanup only happens if called inside setup().
-   */
   function onEvent(event: string, callback: (data: any) => void) {
     if (!socket.value) return () => { };
 
     const wrapper = (data: any) => {
-      callback(data);
+      // Debug log to verify we are receiving events
+      console.log(`📩 Event [${event}] received:`, data);
+
+      if (data && data.payload) {
+        callback(data.payload);
+      } else {
+        callback(data);
+      }
     };
 
     socket.value.on(event, wrapper);
 
     const off = () => {
+      console.log(`🔌 Unsubscribing from [${event}]`);
       socket.value?.off(event, wrapper);
     };
 
-    // Only attach auto-cleanup if we are inside a component setup context
     if (getCurrentInstance()) {
       onUnmounted(off);
     }

@@ -33,6 +33,16 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 	return i, err
 }
 
+const deleteWorkflow = `-- name: DeleteWorkflow :exec
+DELETE FROM workflows
+  WHERE id = $1
+`
+
+func (q *Queries) DeleteWorkflow(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteWorkflow, id)
+	return err
+}
+
 const updateWorkflow = `-- name: UpdateWorkflow :one
 UPDATE workflows
   SET name = $2,

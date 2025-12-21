@@ -2,6 +2,13 @@
   <div class="layout">
     <!-- Left Sidebar: Builds List -->
     <aside class="sidebar">
+      <!-- NEW: Back Navigation -->
+      <div class="sidebar-nav">
+        <router-link to="/" class="back-link">
+          <span class="icon"></span>Workflows
+        </router-link>
+      </div>
+
       <div class="sidebar-head">
         <h3>Builds</h3>
         <button @click="runBuild" :disabled="isTriggering" class="run-btn">
@@ -45,7 +52,6 @@
                 </div>
               </div>
 
-              <!-- GitLab-style Connector Line -->
               <div v-if="idx < sortedJobs.length - 1" class="connector-line"></div>
             </div>
           </div>
@@ -59,7 +65,6 @@
           </div>
 
           <div class="task-list">
-            <!-- Tasks sorted by execution plan -->
             <div v-for="t in sortedTasks" :key="t.id" class="task-row" :class="{ active: selectedTaskId === t.id }"
               @click="selectTask(t.id)">
               <StatusIcon :status="t.status" />
@@ -100,7 +105,7 @@ const tasks = ref<Task[]>([]);
 const selectedTaskId = ref<string | null>(null);
 const isTriggering = ref(false);
 
-// Cleanups
+// Cleanups for manual subscription management
 let unsubJobStatus: (() => void) | null = null;
 let unsubTaskStatus: (() => void) | null = null;
 
@@ -111,13 +116,11 @@ const selectedJob = computed(() => jobs.value.find(j => j.id === selectedJobId.v
 
 const isRunnable = (s: Status) => s === Status.Pending || s === Status.Started;
 
-// Sort jobs based on the Build's Plan linked list
 const sortedJobs = computed(() => {
   if (!currentBuild.value) return [];
   return sortByPlan(jobs.value, currentBuild.value.plan);
 });
 
-// Sort tasks based on the Job's Plan linked list
 const sortedTasks = computed(() => {
   if (!selectedJob.value) return [];
   return sortByPlan(tasks.value, selectedJob.value.plan);
@@ -126,68 +129,86 @@ const sortedTasks = computed(() => {
 // --- Actions ---
 
 const loadBuilds = async () => {
-  const res = await apiClient.get(`/workflows/${workflowId}/builds`);
-  builds.value = res.data.reverse();
+  try {
+    const res = await apiClient.get(`/workflows/${workflowId}/builds`);
+    builds.value = res.data.reverse();
 
-  if (!selectedBuildId.value && builds.value.length) {
-    selectBuild(builds.value[0].id);
-  }
+    // Select latest build if none selected
+    if (!selectedBuildId.value && builds.value.length) {
+      selectBuild(builds.value[0].id);
+    }
+  } catch (e) { console.error("Load builds error", e); }
 };
 
 const selectBuild = async (id: string) => {
+  // 1. Reset state
   selectedBuildId.value = id;
   selectedJobId.value = null;
   selectedTaskId.value = null;
   tasks.value = [];
 
-  // 1. Fetch Jobs
-  const res = await apiClient.get(`/builds/${id}/jobs`);
-  jobs.value = res.data;
-
-  // 2. Switch Socket
+  // 2. Clear old job listener
   if (unsubJobStatus) { unsubJobStatus(); unsubJobStatus = null; }
+
+  // 3. Subscribe NEW listener (for jobs in this build)
+  console.log(`🔌 Subscribing to jobs for build: ${id}`);
   unsubJobStatus = onEvent(`build:${id}:job:status`, (payload: any) => {
     const job = jobs.value.find(j => j.id === payload.id);
-    if (job) job.status = payload.status;
+    if (job) {
+      job.status = payload.status;
+    }
   });
 
-  // 3. Smart Select Job (First Pending/Started, or just First)
-  // We use the computed sortedJobs to ensure we pick logically, not randomly
-  const ordered = sortByPlan(jobs.value, currentBuild.value?.plan);
+  // 4. Fetch Data
+  try {
+    const res = await apiClient.get(`/builds/${id}/jobs`);
+    jobs.value = res.data;
 
-  if (ordered.length > 0) {
-    const activeJob = ordered.find(j => j.status === Status.Started || j.status === Status.Pending);
-    selectJob(activeJob ? activeJob.id : ordered[0].id);
-  }
+    // 5. Auto-select active job
+    const ordered = sortByPlan(jobs.value, currentBuild.value?.plan);
+    if (ordered.length > 0) {
+      const activeJob = ordered.find(j => j.status === Status.Started || j.status === Status.Pending);
+      selectJob(activeJob ? activeJob.id : ordered[0].id);
+    }
+  } catch (e) { console.error("Load jobs error", e); }
 };
 
 const selectJob = async (id: string) => {
+  // 1. Reset state
   selectedJobId.value = id;
   selectedTaskId.value = null;
 
-  // 1. Fetch Tasks
-  const res = await apiClient.get(`/jobs/${id}/tasks`);
-  tasks.value = res.data;
-
-  // 2. Switch Socket
+  // 2. Clear old task listener
   if (unsubTaskStatus) { unsubTaskStatus(); unsubTaskStatus = null; }
+
+  // 3. Subscribe NEW listener (for tasks in this job)
+  console.log(`🔌 Subscribing to tasks for job: ${id}`);
   unsubTaskStatus = onEvent(`job:${id}:task:status`, (payload: any) => {
     const t = tasks.value.find(x => x.id === payload.id);
-    if (t) t.status = payload.status;
+    if (t) {
+      t.status = payload.status;
+    }
   });
 
-  // 3. Auto-Select First Task if available
-  // Need to sort locally here because computed sortedTasks relies on selectedJob being updated
-  const job = jobs.value.find(j => j.id === id);
-  if (job) {
-    const orderedTasks = sortByPlan(tasks.value, job.plan);
-    if (orderedTasks.length > 0) {
-      selectTask(orderedTasks[0].id);
+  // 4. Fetch Data
+  try {
+    const res = await apiClient.get(`/jobs/${id}/tasks`);
+    tasks.value = res.data;
+
+    // 5. Auto-select first task
+    const job = jobs.value.find(j => j.id === id);
+    if (job) {
+      const orderedTasks = sortByPlan(tasks.value, job.plan);
+      if (orderedTasks.length > 0) {
+        selectTask(orderedTasks[0].id);
+      }
     }
-  }
+  } catch (e) { console.error("Load tasks error", e); }
 };
 
-const selectTask = (id: string) => selectedTaskId.value = id;
+const selectTask = (id: string) => {
+  selectedTaskId.value = id;
+};
 
 const runBuild = async () => {
   isTriggering.value = true;
@@ -195,8 +216,11 @@ const runBuild = async () => {
     const res = await apiClient.post(`/workflows/${workflowId}/builds`);
     builds.value.unshift(res.data);
     selectBuild(res.data.id);
-  } catch (e) { alert("Failed to start build"); }
-  finally { isTriggering.value = false; }
+  } catch (e) {
+    alert("Failed to start build");
+  } finally {
+    isTriggering.value = false;
+  }
 };
 
 const abortBuild = async () => {
@@ -205,12 +229,18 @@ const abortBuild = async () => {
   }
 };
 
+// Lifecycle
 onMounted(() => {
   loadBuilds();
-  onEvent(`workflow:${workflowId}:build:status`, (p: any) => {
-    const b = builds.value.find(x => x.id === p.id);
-    if (b) b.status = p.status;
-    else loadBuilds();
+
+  // Listen for Build Status changes (Global for this workflow)
+  onEvent(`workflow:${workflowId}:build:status`, (payload: any) => {
+    const b = builds.value.find(x => x.id === payload.id);
+    if (b) {
+      b.status = payload.status;
+    } else {
+      loadBuilds(); // New build appeared
+    }
   });
 });
 </script>
@@ -231,6 +261,33 @@ onMounted(() => {
   border-right: 1px solid #333;
   display: flex;
   flex-direction: column;
+}
+
+/* Navigation Back Link */
+.sidebar-nav {
+  padding: 12px 15px;
+  border-bottom: 1px solid #333;
+  background-color: #252525;
+}
+
+.back-link {
+  color: #aaa;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.2s;
+}
+
+.back-link:hover {
+  color: #fff;
+}
+
+.back-link .icon {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .sidebar-head {

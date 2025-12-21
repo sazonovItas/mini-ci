@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/sazonovItas/mini-ci/workflower/model"
@@ -14,7 +15,24 @@ type WorkflowRequest struct {
 }
 
 func (a *API) listWorkflows(w http.ResponseWriter, r *http.Request) {
-	workflows, err := a.db.WorkflowRepository().Workflows(r.Context(), 0, 100)
+	limit := 10
+	offset := 0
+
+	query := r.URL.Query()
+
+	if l := query.Get("limit"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil {
+			limit = val
+		}
+	}
+
+	if o := query.Get("offset"); o != "" {
+		if val, err := strconv.Atoi(o); err == nil {
+			offset = val
+		}
+	}
+
+	workflows, err := a.db.WorkflowRepository().Workflows(r.Context(), offset, limit)
 	respond(w, workflows, err)
 }
 
@@ -87,4 +105,15 @@ func (a *API) getWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, wf.Model())
+}
+
+func (a *API) deleteWorkflow(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if err := a.db.WorkflowRepository().Delete(r.Context(), id); err != nil {
+		respondError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

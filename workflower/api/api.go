@@ -33,6 +33,7 @@ func (a *API) RegisterRoutes(mux *http.ServeMux) {
 	r.HandleFunc("POST /api/workflows", a.createWorkflow)
 	r.HandleFunc("GET /api/workflows/{id}", a.getWorkflow)
 	r.HandleFunc("PUT /api/workflows/{id}", a.updateWorkflow)
+	r.HandleFunc("DELETE /api/workflows/{id}", a.deleteWorkflow)
 
 	// Builds
 	r.HandleFunc("GET /api/workflows/{id}/builds", a.listBuilds)
