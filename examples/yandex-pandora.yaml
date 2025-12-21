@@ -1,0 +1,64 @@
+jobs:
+  - name: yandex/pandora
+    run:
+      image: docker.io/library/alpine:latest
+      env:
+        - CGO_ENABLED=1
+      scripts:
+        - name: apk update & install
+          command:
+            - sh
+            - "-c"
+            - |
+              set -eux
+
+              apk update
+
+              apk add git curl make tar build-base
+        - name: install golang
+          command:
+            - sh
+            - "-c"
+            - >
+              set -eux
+
+              curl -LO https://go.dev/dl/go1.25.5.linux-amd64.tar.gz
+
+              rm -rf /usr/local/go && tar -C /usr/local -xzf
+              go1.25.5.linux-amd64.tar.gz
+
+              export PATH="/usr/local/go/bin:$PATH"
+
+              go version
+        - name: clone yandex/pandora
+          command:
+            - sh
+            - "-c"
+            - |
+              set -eux
+
+              git clone https://github.com/yandex/pandora.git /pandora
+        - name: install pandora tools
+          command:
+            - sh
+            - "-c"
+            - |
+              set -eux
+
+              cd /pandora
+
+              export PATH="/usr/local/go/bin:$PATH"
+
+              make tools
+        - name: pandora test
+          command:
+            - sh
+            - "-c"
+            - |
+              set -eux
+
+              cd /pandora
+
+              export PATH="/usr/local/go/bin:$PATH"
+
+              make test
