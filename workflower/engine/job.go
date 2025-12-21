@@ -5,7 +5,6 @@ import (
 
 	"github.com/containerd/log"
 	"github.com/sazonovItas/mini-ci/core/events"
-	"github.com/sazonovItas/mini-ci/core/status"
 	"github.com/sazonovItas/mini-ci/workflower/db"
 	"github.com/sazonovItas/mini-ci/workflower/model"
 )
@@ -74,26 +73,28 @@ func (p JobProcessor) jobStatus(ctx context.Context, event events.JobStatus) err
 		return nil
 	}
 
-	// return job.WithTx(ctx, func(txCtx context.Context) error {
-	// err := job.Lock(txCtx)
-	// if err != nil {
-	// 	return err
-	// }
+	return job.WithTx(ctx, func(txCtx context.Context) error {
+		outputs := &model.Outputs{}
 
-	outputs := &model.Outputs{}
+		task, err := p.scheduleNextTask(ctx, outputs, job.Plan())
+		if err != nil {
+			return err
+		}
 
-	_, err = p.scheduleNextTask(ctx, outputs, job.Plan())
-	if err != nil {
-		return err
-	}
+		err = job.Start(ctx)
+		if err != nil {
+			return err
+		}
 
-	err = job.Start(ctx)
-	if err != nil {
-		return err
-	}
+		if task.Status().IsPending() {
+			err = p.publishTaskStatusChanged(ctx, task.Model())
+			if err != nil {
+				return err
+			}
+		}
 
-	return nil
-	// })
+		return nil
+	})
 }
 
 func (p JobProcessor) taskStatus(ctx context.Context, event events.TaskStatus) error {
@@ -114,79 +115,73 @@ func (p JobProcessor) taskStatus(ctx context.Context, event events.TaskStatus) e
 		return nil
 	}
 
-	// return job.WithTx(ctx, func(txCtx context.Context) error {
-	// err := job.Lock(txCtx)
-	// if err != nil {
-	// 	return err
-	// }
+	return job.WithTx(ctx, func(txCtx context.Context) error {
+		outputs := &model.Outputs{}
 
-	outputs := &model.Outputs{}
-
-	taskStatus, err := p.scheduleNextTask(ctx, outputs, job.Plan())
-	if err != nil {
-		return err
-	}
-
-	if taskStatus.IsFinished() {
-		err = job.Finish(ctx, taskStatus)
+		task, err := p.scheduleNextTask(ctx, outputs, job.Plan())
 		if err != nil {
 			return err
 		}
 
-		err = p.publishStatusChanged(ctx, job.Model())
-		if err != nil {
-			return err
-		}
-	}
+		taskStatus := task.Status()
 
-	return nil
-	// })
+		if taskStatus.IsFinished() {
+			err = job.Finish(ctx, taskStatus)
+			if err != nil {
+				return err
+			}
+
+			err = p.publishStatusChanged(ctx, job.Model())
+			if err != nil {
+				return err
+			}
+		}
+
+		if taskStatus.IsPending() {
+			err = p.publishTaskStatusChanged(ctx, task.Model())
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
-func (p JobProcessor) scheduleNextTask(ctx context.Context, outputs *model.Outputs, plan model.TaskPlan) (status.Status, error) {
+func (p JobProcessor) scheduleNextTask(ctx context.Context, outputs *model.Outputs, plan model.TaskPlan) (db.Task, error) {
 	task, found, err := p.tasks.Task(ctx, plan.Ref.ID)
 	if err != nil {
-		return status.StatusUnknown, err
+		return nil, err
 	}
 
 	if !found {
-		return status.StatusUnknown, ErrTaskNotFound
+		return nil, ErrTaskNotFound
 	}
 
 	if task.Status().IsCreated() {
-		// err = task.Lock(ctx)
-		// if err != nil {
-		// 	return status.StatusUnknown, err
-		// }
-
 		config := task.Config()
 		config.GetOutputs(outputs)
 
 		err = task.UpdateConfig(ctx, config)
 		if err != nil {
-			return status.StatusUnknown, err
+			return nil, err
 		}
 
 		err = task.Pending(ctx)
 		if err != nil {
-			return status.StatusUnknown, err
+			return nil, err
 		}
 
-		err = p.publishTaskStatusChanged(ctx, task.Model())
-		if err != nil {
-			return status.StatusUnknown, err
-		}
-
-		return task.Status(), nil
+		return task, nil
 	}
 
 	if task.Status().IsRunning() {
-		return task.Status(), nil
+		return task, nil
 	}
 
 	if task.Status().IsFinished() {
 		if !task.Status().IsSucceeded() {
-			return task.Status(), nil
+			return task, nil
 		}
 
 		task.Config().SetOutputs(outputs)
@@ -194,7 +189,7 @@ func (p JobProcessor) scheduleNextTask(ctx context.Context, outputs *model.Outpu
 
 	next := plan.Next
 	if next == nil {
-		return task.Status(), nil
+		return task, nil
 	}
 
 	return p.scheduleNextTask(ctx, outputs, *next)

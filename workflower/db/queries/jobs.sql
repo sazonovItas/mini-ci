@@ -15,6 +15,12 @@ SELECT * FROM jobs
 SELECT * FROM jobs
   WHERE status = $1;
 
+-- name: JobsForSchedule :many
+SELECT * FROM jobs
+  WHERE status = $1
+  ORDER BY scheduled_at
+  LIMIT $2;
+
 -- name: CreateJob :one
 INSERT INTO jobs (id, build_id, name, status, config, plan)
   VALUES ($1, $2, $3, $4, $5, $6)

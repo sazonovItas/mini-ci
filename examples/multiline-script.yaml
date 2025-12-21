@@ -1,0 +1,19 @@
+jobs:
+  - name: multiline-script
+    run:
+      image: docker.io/library/alpine:latest
+      scripts:
+        - name: hello, minici
+          command:
+            - sh
+            - -c
+            - |
+              set -eux
+
+              echo "Hello, minici"
+
+              ping -c 2 archlinux.org
+
+              apk update && apk add curl
+
+              curl -L archlinux.org

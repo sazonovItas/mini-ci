@@ -11,6 +11,46 @@ import (
 	"github.com/sazonovItas/mini-ci/workflower/model"
 )
 
+type JobRepository struct {
+	queries *Queries
+}
+
+func NewJobRepository(queries *Queries) *JobRepository {
+	return &JobRepository{
+		queries: queries,
+	}
+}
+
+func (r *JobRepository) JobForSchedules(ctx context.Context) ([]model.Job, error) {
+	const (
+		limit = 10
+	)
+
+	queries := r.queries.Queries(ctx)
+
+	dbJobs, err := queries.JobsForSchedule(
+		ctx,
+		psql.JobsForScheduleParams{
+			Status: status.StatusStarted.String(),
+			Limit:  limit,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	jobs := make([]model.Job, 0, len(dbJobs))
+	for _, job := range dbJobs {
+		jobs = append(jobs, model.Job{
+			ID:      job.ID,
+			BuildID: job.BuildID,
+			Status:  status.Status(job.Status),
+		})
+	}
+
+	return jobs, nil
+}
+
 type JobFactory struct {
 	queries *Queries
 }

@@ -10,27 +10,46 @@ CREATE TABLE IF NOT EXISTS workflows (
   PRIMARY KEY   (id)
 );
 
+CREATE OR REPLACE FUNCTION scheduled_at_trigger() RETURNS TRIGGER
+  LANGUAGE plpgsql AS
+$$ BEGIN
+  NEW.scheduled_at := NOW(); 
+  RETURN NEW;
+END; $$;
+
 CREATE TABLE IF NOT EXISTS builds (
-  id          varchar(36) NOT NULL,
-  workflow_id varchar(36) NOT NULL DEFAULT 'null',
-  status      text        NOT NULL,
-  config      jsonb       DEFAULT NULL,
-  plan        jsonb       DEFAULT NULL,
-  created_at  timestamp   DEFAULT NOW(),
+  id            varchar(36) NOT NULL,
+  workflow_id   varchar(36) NOT NULL DEFAULT 'null',
+  status        text        NOT NULL,
+  config        jsonb       DEFAULT NULL,
+  plan          jsonb       DEFAULT NULL,
+  created_at    timestamp   DEFAULT NOW(),
+  scheduled_at  timestamp   DEFAULT NOW(),
   PRIMARY KEY (id),
   FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE SET DEFAULT
 );
 
+CREATE OR REPLACE TRIGGER scheduled_at_builds_trgr
+  AFTER UPDATE
+  ON builds
+  FOR EACH ROW EXECUTE PROCEDURE scheduled_at_trigger();
+
 CREATE TABLE IF NOT EXISTS jobs (
-  id        varchar(36) NOT NULL,
-  build_id  varchar(36) NOT NULL,
-  name      text        NOT NULL,
-  status    text        NOT NULL,
-  config    jsonb       DEFAULT NULL,
-  plan      jsonb       DEFAULT NULL,
+  id            varchar(36) NOT NULL,
+  build_id      varchar(36) NOT NULL,
+  name          text        NOT NULL,
+  status        text        NOT NULL,
+  config        jsonb       DEFAULT NULL,
+  plan          jsonb       DEFAULT NULL,
+  scheduled_at  timestamp   DEFAULT NOW(),
   PRIMARY KEY (id),
   FOREIGN KEY (build_id) REFERENCES builds (id) ON DELETE CASCADE
 );
+
+CREATE OR REPLACE TRIGGER scheduled_at_jobs_trgr
+  AFTER UPDATE
+  ON jobs
+  FOR EACH ROW EXECUTE PROCEDURE scheduled_at_trigger();
 
 CREATE TABLE IF NOT EXISTS tasks (
   id        varchar(36) NOT NULL,

@@ -41,7 +41,6 @@ func NewSocketIORunner(name, address, namespace, eventName string) *SocketIORunn
 	opts.SetReconnectionAttempts(math.MaxInt32)
 	opts.SetReconnectionDelay(3)
 	opts.SetReconnectionDelayMax(3)
-	opts.SetTimeout(10 * time.Minute)
 
 	manager := socket.NewManager(address, opts)
 

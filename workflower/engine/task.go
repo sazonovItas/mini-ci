@@ -73,11 +73,6 @@ func (p TaskProcessor) initContainerFinish(ctx context.Context, event events.Ini
 			return ErrTaskNotFound
 		}
 
-		// err = task.Lock(txCtx)
-		// if err != nil {
-		// 	return err
-		// }
-
 		config := task.Config().(*model.InitStep)
 		config.Outputs = &model.InitOutputs{ContainerID: event.ContainerID}
 
@@ -86,9 +81,7 @@ func (p TaskProcessor) initContainerFinish(ctx context.Context, event events.Ini
 			return err
 		}
 
-		finishStatus := status.StatusSucceeded
-
-		err = task.Finish(txCtx, finishStatus)
+		err = task.Finish(txCtx, status.StatusSucceeded)
 		if err != nil {
 			return err
 		}
@@ -112,11 +105,6 @@ func (p TaskProcessor) scriptFinish(ctx context.Context, event events.ScriptFini
 		if !found {
 			return ErrTaskNotFound
 		}
-
-		// err = task.Lock(txCtx)
-		// if err != nil {
-		// 	return err
-		// }
 
 		config := task.Config().(*model.ScriptStep)
 		config.Outputs = &model.ScriptOutputs{ExitStatus: event.ExitStatus, Succeeded: event.Succeeded}
@@ -164,11 +152,6 @@ func (p TaskProcessor) taskError(ctx context.Context, event events.TaskError) er
 			return nil
 		}
 
-		// err = task.Lock(txCtx)
-		// if err != nil {
-		// 	return err
-		// }
-
 		err = task.Finish(txCtx, status.StatusErrored)
 		if err != nil {
 			return err
@@ -197,11 +180,6 @@ func (p TaskProcessor) taskStatus(ctx context.Context, event events.TaskStatus) 
 		if !found {
 			return ErrTaskNotFound
 		}
-
-		// err = task.Lock(txCtx)
-		// if err != nil {
-		// 	return err
-		// }
 
 		nextStatus, event, err := p.startTask(ctx, task.Model())
 		if err != nil {
@@ -290,12 +268,7 @@ func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) er
 		return nil
 	}
 
-	return task.WithTx(ctx, func(txCtx context.Context) error {
-		// err = task.Lock(txCtx)
-		// if err != nil {
-		// 	return err
-		// }
-
+	err = task.WithTx(ctx, func(txCtx context.Context) error {
 		err = p.abortStep(txCtx, task.ID(), task.Config())
 		if err != nil {
 			return err
@@ -306,13 +279,18 @@ func (p TaskProcessor) taskAbort(ctx context.Context, event events.TaskAbort) er
 			return err
 		}
 
-		err = p.publishStatusChanged(txCtx, task.Model())
-		if err != nil {
-			return err
-		}
-
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+
+	err = p.publishStatusChanged(ctx, task.Model())
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p TaskProcessor) abortStep(ctx context.Context, taskID string, step model.StepConfig) (err error) {

@@ -58,12 +58,7 @@ func New(cfg config.Config) (*Workflower, error) {
 
 	eventSaver := runner.NewEventSaver(bus, db.EventRepository())
 
-	engine := engine.New(
-		bus,
-		db.BuildFactory(),
-		db.JobFactory(),
-		db.TaskFactory(),
-	)
+	engine := engine.New(db, bus)
 
 	workflower := &Workflower{
 		apiServer:  apiServer,

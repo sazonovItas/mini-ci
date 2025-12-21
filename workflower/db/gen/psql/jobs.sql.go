@@ -12,7 +12,7 @@ import (
 const createEmptyJob = `-- name: CreateEmptyJob :one
 INSERT INTO jobs (id, build_id, name, status)
   VALUES ($1, $2, $3, $4)
-  RETURNING id, build_id, name, status, config, plan
+  RETURNING id, build_id, name, status, config, plan, scheduled_at
 `
 
 type CreateEmptyJobParams struct {
@@ -37,6 +37,7 @@ func (q *Queries) CreateEmptyJob(ctx context.Context, arg CreateEmptyJobParams) 
 		&i.Status,
 		&i.Config,
 		&i.Plan,
+		&i.ScheduledAt,
 	)
 	return i, err
 }
@@ -44,7 +45,7 @@ func (q *Queries) CreateEmptyJob(ctx context.Context, arg CreateEmptyJobParams) 
 const createJob = `-- name: CreateJob :one
 INSERT INTO jobs (id, build_id, name, status, config, plan)
   VALUES ($1, $2, $3, $4, $5, $6)
-  RETURNING id, build_id, name, status, config, plan
+  RETURNING id, build_id, name, status, config, plan, scheduled_at
 `
 
 type CreateJobParams struct {
@@ -73,12 +74,13 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		&i.Status,
 		&i.Config,
 		&i.Plan,
+		&i.ScheduledAt,
 	)
 	return i, err
 }
 
 const job = `-- name: Job :one
-SELECT id, build_id, name, status, config, plan FROM jobs
+SELECT id, build_id, name, status, config, plan, scheduled_at FROM jobs
   WHERE id = $1
 `
 
@@ -92,12 +94,13 @@ func (q *Queries) Job(ctx context.Context, id string) (Job, error) {
 		&i.Status,
 		&i.Config,
 		&i.Plan,
+		&i.ScheduledAt,
 	)
 	return i, err
 }
 
 const jobsByBuild = `-- name: JobsByBuild :many
-SELECT id, build_id, name, status, config, plan FROM jobs
+SELECT id, build_id, name, status, config, plan, scheduled_at FROM jobs
   WHERE build_id = $1
 `
 
@@ -117,6 +120,7 @@ func (q *Queries) JobsByBuild(ctx context.Context, buildID string) ([]Job, error
 			&i.Status,
 			&i.Config,
 			&i.Plan,
+			&i.ScheduledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -129,7 +133,7 @@ func (q *Queries) JobsByBuild(ctx context.Context, buildID string) ([]Job, error
 }
 
 const jobsByStatus = `-- name: JobsByStatus :many
-SELECT id, build_id, name, status, config, plan FROM jobs
+SELECT id, build_id, name, status, config, plan, scheduled_at FROM jobs
   WHERE status = $1
 `
 
@@ -149,6 +153,47 @@ func (q *Queries) JobsByStatus(ctx context.Context, status string) ([]Job, error
 			&i.Status,
 			&i.Config,
 			&i.Plan,
+			&i.ScheduledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const jobsForSchedule = `-- name: JobsForSchedule :many
+SELECT id, build_id, name, status, config, plan, scheduled_at FROM jobs
+  WHERE status = $1
+  ORDER BY scheduled_at
+  LIMIT $2
+`
+
+type JobsForScheduleParams struct {
+	Status string
+	Limit  int32
+}
+
+func (q *Queries) JobsForSchedule(ctx context.Context, arg JobsForScheduleParams) ([]Job, error) {
+	rows, err := q.db.Query(ctx, jobsForSchedule, arg.Status, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Job
+	for rows.Next() {
+		var i Job
+		if err := rows.Scan(
+			&i.ID,
+			&i.BuildID,
+			&i.Name,
+			&i.Status,
+			&i.Config,
+			&i.Plan,
+			&i.ScheduledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -161,7 +206,7 @@ func (q *Queries) JobsByStatus(ctx context.Context, status string) ([]Job, error
 }
 
 const lockJob = `-- name: LockJob :one
-SELECT id, build_id, name, status, config, plan FROM jobs
+SELECT id, build_id, name, status, config, plan, scheduled_at FROM jobs
   WHERE id = $1 LIMIT 1
   FOR UPDATE
 `
@@ -176,6 +221,7 @@ func (q *Queries) LockJob(ctx context.Context, id string) (Job, error) {
 		&i.Status,
 		&i.Config,
 		&i.Plan,
+		&i.ScheduledAt,
 	)
 	return i, err
 }
@@ -184,7 +230,7 @@ const updateJobStatus = `-- name: UpdateJobStatus :one
 UPDATE jobs
   SET status = $2
   WHERE id = $1
-  RETURNING id, build_id, name, status, config, plan
+  RETURNING id, build_id, name, status, config, plan, scheduled_at
 `
 
 type UpdateJobStatusParams struct {
@@ -202,6 +248,7 @@ func (q *Queries) UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams
 		&i.Status,
 		&i.Config,
 		&i.Plan,
+		&i.ScheduledAt,
 	)
 	return i, err
 }

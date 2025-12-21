@@ -1,0 +1,34 @@
+jobs:
+  - name: job-1
+    run:
+      image: docker.io/library/alpine:latest
+      scripts:
+        - name: hello, minici
+          command:
+            - sh
+            - -c
+            - |
+
+              echo "hello, minici"
+        - name: list directories
+          command: ["ls", "-la"]
+  - name: job-2
+    run:
+      image: docker.io/library/alpine:latest
+      scripts:
+        - name: apk add packet
+          command:
+            - sh
+            - -c
+            - |
+              set -eux
+
+              apk update && apk add curl
+        - name: use installed packet
+          command:
+            - sh
+            - -c
+            - |
+              set -eux
+
+              curl -L google.com

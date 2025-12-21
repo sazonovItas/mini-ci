@@ -16,6 +16,12 @@ SELECT * FROM builds
 SELECT * FROM builds
   WHERE status = $1;
 
+-- name: BuildsForSchedule :many
+SELECT * FROM builds
+  WHERE status = $1
+  ORDER BY scheduled_at
+  LIMIT $2;
+
 -- name: CreateBuild :one
 INSERT INTO builds (id, workflow_id, status, config, plan) 
   VALUES ($1, $2, $3, $4, $5)

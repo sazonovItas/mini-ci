@@ -157,7 +157,7 @@ func (t *task) Lock(ctx context.Context) error {
 func (t *task) Pending(ctx context.Context) error {
 	queries := t.queries.Queries(ctx)
 
-	if t.Status().IsRunning() {
+	if t.Status().IsStarted() {
 		return ErrAlreadyRunning
 	}
 

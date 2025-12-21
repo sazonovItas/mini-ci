@@ -11,6 +11,46 @@ import (
 	"github.com/sazonovItas/mini-ci/workflower/model"
 )
 
+type BuildRepository struct {
+	queries *Queries
+}
+
+func NewBuildRepository(queries *Queries) *BuildRepository {
+	return &BuildRepository{
+		queries: queries,
+	}
+}
+
+func (r *BuildRepository) BuildsForSchedule(ctx context.Context) ([]model.Build, error) {
+	const (
+		limit = 10
+	)
+
+	queries := r.queries.Queries(ctx)
+
+	dbBuilds, err := queries.BuildsForSchedule(
+		ctx,
+		psql.BuildsForScheduleParams{
+			Status: status.StatusStarted.String(),
+			Limit:  limit,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	builds := make([]model.Build, 0, len(dbBuilds))
+	for _, b := range dbBuilds {
+		builds = append(builds, model.Build{
+			ID:         b.ID,
+			WorkflowID: b.WorkflowID,
+			Status:     status.Status(b.Status),
+		})
+	}
+
+	return builds, nil
+}
+
 type BuildFactory struct {
 	queries *Queries
 }

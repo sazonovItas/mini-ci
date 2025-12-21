@@ -11,12 +11,13 @@ import (
 )
 
 type Build struct {
-	ID         string
-	WorkflowID string
-	Status     string
-	Config     []byte
-	Plan       []byte
-	CreatedAt  pgtype.Timestamp
+	ID          string
+	WorkflowID  string
+	Status      string
+	Config      []byte
+	Plan        []byte
+	CreatedAt   pgtype.Timestamp
+	ScheduledAt pgtype.Timestamp
 }
 
 type Event struct {
@@ -27,12 +28,13 @@ type Event struct {
 }
 
 type Job struct {
-	ID      string
-	BuildID string
-	Name    string
-	Status  string
-	Config  []byte
-	Plan    []byte
+	ID          string
+	BuildID     string
+	Name        string
+	Status      string
+	Config      []byte
+	Plan        []byte
+	ScheduledAt pgtype.Timestamp
 }
 
 type Task struct {
