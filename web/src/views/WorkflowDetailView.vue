@@ -34,25 +34,36 @@
         <!-- Center: Pipeline Graph (Jobs) -->
         <div class="graph-container">
           <div class="pipeline">
-            <div v-for="(job, idx) in jobs" :key="job.id" class="step">
+            <div v-for="(job, idx) in sortedJobs" :key="job.id" class="step-wrapper">
+
+              <!-- Job Node -->
               <div class="job-node" :class="{ active: selectedJobId === job.id, [job.status]: true }"
                 @click="selectJob(job.id)">
-                <span class="job-name">{{ job.name }}</span>
-                <StatusIcon :status="job.status" />
+                <div class="node-header">
+                  <span class="job-name">{{ job.name }}</span>
+                  <StatusIcon :status="job.status" />
+                </div>
               </div>
-              <div v-if="idx < jobs.length - 1" class="connector"></div>
+
+              <!-- GitLab-style Connector Line -->
+              <div v-if="idx < sortedJobs.length - 1" class="connector-line"></div>
             </div>
           </div>
         </div>
 
         <!-- Right/Bottom: Job Details (Tasks + Logs) -->
         <div class="inspector" v-if="selectedJob">
+          <div class="task-header">
+            <h4>{{ selectedJob.name }}</h4>
+            <span class="sub-text">Job Tasks</span>
+          </div>
+
           <div class="task-list">
-            <h4>Tasks in {{ selectedJob.name }}</h4>
-            <div v-for="t in tasks" :key="t.id" class="task-row" :class="{ active: selectedTaskId === t.id }"
+            <!-- Tasks sorted by execution plan -->
+            <div v-for="t in sortedTasks" :key="t.id" class="task-row" :class="{ active: selectedTaskId === t.id }"
               @click="selectTask(t.id)">
               <StatusIcon :status="t.status" />
-              <span>{{ t.name }}</span>
+              <span class="task-name">{{ t.name }}</span>
             </div>
           </div>
 
@@ -71,7 +82,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { apiClient } from '../api/client';
 import { useSocket } from '../composables/useSocket';
-import { type Build, type Job, type Task, Status } from '../types';
+import { sortByPlan } from '../utils/plan';
+import Status, { type Build, type Job, type Task } from '../types';
 import StatusIcon from '../components/common/StatusIcon.vue';
 import LogViewer from '../components/logs/LogViewer.vue';
 
@@ -88,16 +100,31 @@ const tasks = ref<Task[]>([]);
 const selectedTaskId = ref<string | null>(null);
 const isTriggering = ref(false);
 
+// Cleanups
+let unsubJobStatus: (() => void) | null = null;
+let unsubTaskStatus: (() => void) | null = null;
+
+// --- Computed ---
+
 const currentBuild = computed(() => builds.value.find(b => b.id === selectedBuildId.value));
 const selectedJob = computed(() => jobs.value.find(j => j.id === selectedJobId.value));
 
 const isRunnable = (s: Status) => s === Status.Pending || s === Status.Started;
 
-// Subscription Handles (to unsubscribe when switching)
-let unsubJobStatus: (() => void) | null = null;
-let unsubTaskStatus: (() => void) | null = null;
+// Sort jobs based on the Build's Plan linked list
+const sortedJobs = computed(() => {
+  if (!currentBuild.value) return [];
+  return sortByPlan(jobs.value, currentBuild.value.plan);
+});
 
-// --- 1. Load Initial Builds ---
+// Sort tasks based on the Job's Plan linked list
+const sortedTasks = computed(() => {
+  if (!selectedJob.value) return [];
+  return sortByPlan(tasks.value, selectedJob.value.plan);
+});
+
+// --- Actions ---
+
 const loadBuilds = async () => {
   const res = await apiClient.get(`/workflows/${workflowId}/builds`);
   builds.value = res.data.reverse();
@@ -107,64 +134,60 @@ const loadBuilds = async () => {
   }
 };
 
-// --- 2. Select Build (Switch Job Status Listeners) ---
 const selectBuild = async (id: string) => {
   selectedBuildId.value = id;
   selectedJobId.value = null;
   selectedTaskId.value = null;
   tasks.value = [];
 
-  // A. Fetch Jobs
+  // 1. Fetch Jobs
   const res = await apiClient.get(`/builds/${id}/jobs`);
   jobs.value = res.data;
 
-  // B. Switch Socket Listener for Jobs
-  if (unsubJobStatus) {
-    unsubJobStatus();
-    unsubJobStatus = null;
-  }
-
-  // Subscribe to: build:{id}:job:status
-  // Payload: { id: "job-id", status: "...", ... }
+  // 2. Switch Socket
+  if (unsubJobStatus) { unsubJobStatus(); unsubJobStatus = null; }
   unsubJobStatus = onEvent(`build:${id}:job:status`, (payload: any) => {
     const job = jobs.value.find(j => j.id === payload.id);
     if (job) job.status = payload.status;
   });
 
-  // Auto-select first job
-  if (jobs.value.length) {
-    selectJob(jobs.value[0].id);
+  // 3. Smart Select Job (First Pending/Started, or just First)
+  // We use the computed sortedJobs to ensure we pick logically, not randomly
+  const ordered = sortByPlan(jobs.value, currentBuild.value?.plan);
+
+  if (ordered.length > 0) {
+    const activeJob = ordered.find(j => j.status === Status.Started || j.status === Status.Pending);
+    selectJob(activeJob ? activeJob.id : ordered[0].id);
   }
 };
 
-// --- 3. Select Job (Switch Task Status Listeners) ---
 const selectJob = async (id: string) => {
   selectedJobId.value = id;
   selectedTaskId.value = null;
 
-  // A. Fetch Tasks
+  // 1. Fetch Tasks
   const res = await apiClient.get(`/jobs/${id}/tasks`);
   tasks.value = res.data;
 
-  // B. Switch Socket Listener for Tasks
-  if (unsubTaskStatus) {
-    unsubTaskStatus();
-    unsubTaskStatus = null;
-  }
-
-  // Subscribe to: job:{id}:task:status
-  // Payload: { id: "task-id", status: "...", ... }
+  // 2. Switch Socket
+  if (unsubTaskStatus) { unsubTaskStatus(); unsubTaskStatus = null; }
   unsubTaskStatus = onEvent(`job:${id}:task:status`, (payload: any) => {
-    const task = tasks.value.find(t => t.id === payload.id);
-    if (task) task.status = payload.status;
+    const t = tasks.value.find(x => x.id === payload.id);
+    if (t) t.status = payload.status;
   });
+
+  // 3. Auto-Select First Task if available
+  // Need to sort locally here because computed sortedTasks relies on selectedJob being updated
+  const job = jobs.value.find(j => j.id === id);
+  if (job) {
+    const orderedTasks = sortByPlan(tasks.value, job.plan);
+    if (orderedTasks.length > 0) {
+      selectTask(orderedTasks[0].id);
+    }
+  }
 };
 
-const selectTask = (id: string) => {
-  selectedTaskId.value = id;
-};
-
-// --- Actions ---
+const selectTask = (id: string) => selectedTaskId.value = id;
 
 const runBuild = async () => {
   isTriggering.value = true;
@@ -172,11 +195,8 @@ const runBuild = async () => {
     const res = await apiClient.post(`/workflows/${workflowId}/builds`);
     builds.value.unshift(res.data);
     selectBuild(res.data.id);
-  } catch (e) {
-    alert("Cannot start build (maybe one is already running?)");
-  } finally {
-    isTriggering.value = false;
-  }
+  } catch (e) { alert("Failed to start build"); }
+  finally { isTriggering.value = false; }
 };
 
 const abortBuild = async () => {
@@ -185,21 +205,12 @@ const abortBuild = async () => {
   }
 };
 
-// --- Lifecycle ---
-
 onMounted(() => {
   loadBuilds();
-
-  // Global Listener for Build Statuses on this Workflow
-  // Payload: { id: "build-id", status: "...", ... }
-  onEvent(`workflow:${workflowId}:build:status`, (payload: any) => {
-    const b = builds.value.find(x => x.id === payload.id);
-    if (b) {
-      b.status = payload.status;
-    } else {
-      // New build created by someone else
-      loadBuilds();
-    }
+  onEvent(`workflow:${workflowId}:build:status`, (p: any) => {
+    const b = builds.value.find(x => x.id === p.id);
+    if (b) b.status = p.status;
+    else loadBuilds();
   });
 });
 </script>
@@ -208,15 +219,15 @@ onMounted(() => {
 .layout {
   display: flex;
   height: 100vh;
-  background: #1a1a1a;
+  background: #151515;
   color: #eee;
   overflow: hidden;
 }
 
 /* Sidebar */
 .sidebar {
-  width: 220px;
-  background: #222;
+  width: 240px;
+  background: #1e1e1e;
   border-right: 1px solid #333;
   display: flex;
   flex-direction: column;
@@ -228,15 +239,23 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: #252525;
 }
 
 .run-btn {
   background: #3d7cf9;
   color: white;
   border: none;
-  padding: 5px 10px;
+  padding: 6px 12px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .build-list {
@@ -248,9 +267,10 @@ onMounted(() => {
   padding: 12px 15px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   border-bottom: 1px solid #2a2a2a;
+  transition: background 0.2s;
 }
 
 .build-item:hover {
@@ -258,8 +278,15 @@ onMounted(() => {
 }
 
 .build-item.active {
-  background: #333;
+  background: #2a2a2a;
   border-left: 3px solid #3d7cf9;
+  padding-left: 12px;
+}
+
+.b-info {
+  font-family: monospace;
+  font-size: 0.95rem;
+  color: #ccc;
 }
 
 /* Content */
@@ -270,8 +297,8 @@ onMounted(() => {
 }
 
 .top-bar {
-  padding: 15px 20px;
-  background: #222;
+  padding: 15px 25px;
+  background: #1e1e1e;
   border-bottom: 1px solid #333;
   display: flex;
   justify-content: space-between;
@@ -279,31 +306,46 @@ onMounted(() => {
 }
 
 .status-badge {
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: 4px;
   font-size: 0.8rem;
   text-transform: uppercase;
   font-weight: bold;
-  background: #444;
+  background: #333;
+  letter-spacing: 0.5px;
 }
 
 .status-badge.succeeded {
-  background: #3cb371;
+  background: #2e7d32;
+  color: #fff;
+}
+
+.status-badge.failed,
+.status-badge.errored {
+  background: #c62828;
+  color: white;
+}
+
+.status-badge.started,
+.status-badge.pending {
+  background: #f9a825;
   color: #000;
 }
 
-.status-badge.failed {
-  background: #e74c3c;
+.status-badge.aborted {
+  background: #6a1b9a;
   color: white;
 }
 
 .abort-btn {
-  background: #8e44ad;
+  background: #c62828;
   color: white;
   border: none;
-  padding: 5px 15px;
-  margin-left: 10px;
+  padding: 6px 16px;
+  margin-left: 15px;
   cursor: pointer;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 /* Workspace */
@@ -311,17 +353,19 @@ onMounted(() => {
   flex: 1;
   display: flex;
   overflow: hidden;
+  background: #121212;
 }
 
-/* Graph */
+/* Graph Area */
 .graph-container {
   flex: 2;
-  background: #161616;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  padding: 40px;
   overflow: auto;
+  background-image: radial-gradient(#222 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .pipeline {
@@ -329,81 +373,139 @@ onMounted(() => {
   align-items: center;
 }
 
+.step-wrapper {
+  display: flex;
+  align-items: center;
+}
+
 .job-node {
-  width: 140px;
-  height: 80px;
-  background: #222;
+  width: 160px;
+  height: 70px;
+  background: #1e1e1e;
   border: 2px solid #444;
   border-radius: 6px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
-  gap: 8px;
   cursor: pointer;
-  transition: 0.2s;
+  transition: all 0.2s;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
 }
 
 .job-node:hover {
-  background: #2a2a2a;
+  transform: translateY(-2px);
+  border-color: #666;
 }
 
 .job-node.active {
   border-color: #3d7cf9;
-  background: #2a2a2a;
+  box-shadow: 0 0 0 2px rgba(61, 124, 249, 0.3);
+  background: #252525;
 }
 
 .job-node.succeeded {
-  border-color: #3cb371;
+  border-color: #2e7d32;
 }
 
 .job-node.failed {
-  border-color: #e74c3c;
+  border-color: #c62828;
 }
 
-.connector {
-  width: 40px;
+.job-node.started {
+  border-color: #f9a825;
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 15px;
+  width: 100%;
+}
+
+.job-name {
+  font-weight: 500;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Connector Line */
+.connector-line {
+  width: 50px;
   height: 2px;
   background: #444;
+  position: relative;
+  z-index: 1;
 }
 
-/* Inspector */
+/* Inspector / Logs */
 .inspector {
   flex: 1;
-  min-width: 400px;
+  min-width: 450px;
+  max-width: 600px;
   background: #1e1e1e;
   border-left: 1px solid #333;
   display: flex;
   flex-direction: column;
+  box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
+}
+
+.task-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #333;
+  background: #252525;
+}
+
+.task-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.sub-text {
+  font-size: 0.8rem;
+  color: #888;
 }
 
 .task-list {
-  padding: 15px;
-  border-bottom: 1px solid #333;
-  max-height: 40%;
+  padding: 0;
   overflow-y: auto;
+  max-height: 35vh;
+  background: #1a1a1a;
 }
 
 .task-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px;
+  gap: 12px;
+  padding: 10px 20px;
   cursor: pointer;
-  border-radius: 4px;
+  border-bottom: 1px solid #222;
+  transition: background 0.1s;
 }
 
 .task-row:hover {
-  background: #2a2a2a;
+  background: #252525;
 }
 
 .task-row.active {
-  background: #333;
+  background: #2c2c2c;
+  border-left: 3px solid #3d7cf9;
+  padding-left: 17px;
+}
+
+.task-name {
+  font-size: 0.9rem;
 }
 
 .log-pane {
   flex: 1;
   overflow: hidden;
+  background: #000;
+  border-top: 1px solid #333;
 }
 
 .empty-state {
@@ -412,5 +514,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   color: #555;
+  background: #151515;
+  border-top: 1px solid #333;
 }
 </style>

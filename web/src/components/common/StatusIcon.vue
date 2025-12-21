@@ -6,7 +6,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Status } from '../../types';
+import Status from '../../types';
 
 const props = defineProps<{ status: Status }>();
 

@@ -1,4 +1,4 @@
-export enum Status {
+enum Status {
   Created = "created",
   Pending = "pending",
   Started = "started",
@@ -7,6 +7,13 @@ export enum Status {
   Errored = "errored",
   Aborted = "aborted",
   Skipped = "skipped",
+}
+export default Status;
+
+export interface PlanNode {
+  ref?: { id: string };
+  next?: PlanNode;
+  config?: any;
 }
 
 export interface Workflow {
@@ -20,6 +27,7 @@ export interface Build {
   id: string;
   workflowId: string;
   status: Status;
+  plan: PlanNode; // Used to order Jobs
 }
 
 export interface Job {
@@ -27,6 +35,7 @@ export interface Job {
   buildId: string;
   name: string;
   status: Status;
+  plan: PlanNode; // Used to order Tasks
 }
 
 export interface Task {
@@ -34,6 +43,7 @@ export interface Task {
   jobId: string;
   name: string;
   status: Status;
+  config: any;
 }
 
 export interface LogMessage {
