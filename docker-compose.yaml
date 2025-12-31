@@ -45,6 +45,18 @@ services:
     depends_on:
       - db
 
+  web:
+    build:
+      context: web
+    image: minici/web:local
+    restart: always
+    ports:
+      - 5173:80
+    networks:
+      - default
+    depends_on:
+      - workflower
+
   worker:
     build:
       context: .

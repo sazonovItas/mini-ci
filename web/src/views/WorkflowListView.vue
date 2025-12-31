@@ -8,7 +8,7 @@
     <div class="wf-list">
       <div v-for="wf in workflows" :key="wf.id" class="wf-card">
         <div class="wf-status">
-          <StatusIcon :status="wf.currBuild?.status || 'created'" />
+          <StatusIcon :status="wf.currBuild?.status || Status.Created" />
         </div>
         <div class="wf-info">
           <router-link :to="`/workflows/${wf.id}`" class="wf-name">{{ wf.name }}</router-link>
@@ -42,6 +42,7 @@ import type { Workflow } from '../types';
 import StatusIcon from '../components/common/StatusIcon.vue';
 import Pagination from '../components/common/Pagination.vue';
 import { useSocket } from '../composables/useSocket';
+import Status from '../types/index.ts';
 
 const workflows = ref<Workflow[]>([]);
 const limit = ref(10);

@@ -5,7 +5,9 @@ const socket = ref<Socket | null>(null);
 
 export function useSocket() {
   if (!socket.value) {
-    socket.value = io("http://localhost:8080", {
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+
+    socket.value = io(socketUrl, {
       transports: ["websocket"],
       withCredentials: true,
     });
@@ -17,9 +19,6 @@ export function useSocket() {
     if (!socket.value) return () => { };
 
     const wrapper = (data: any) => {
-      // Debug log to verify we are receiving events
-      console.log(`📩 Event [${event}] received:`, data);
-
       if (data && data.payload) {
         callback(data.payload);
       } else {

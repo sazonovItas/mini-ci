@@ -135,7 +135,7 @@ const loadBuilds = async () => {
 
     // Select latest build if none selected
     if (!selectedBuildId.value && builds.value.length) {
-      selectBuild(builds.value[0].id);
+      selectBuild(builds.value[0]!.id);
     }
   } catch (e) { console.error("Load builds error", e); }
 };
@@ -168,7 +168,7 @@ const selectBuild = async (id: string) => {
     const ordered = sortByPlan(jobs.value, currentBuild.value?.plan);
     if (ordered.length > 0) {
       const activeJob = ordered.find(j => j.status === Status.Started || j.status === Status.Pending);
-      selectJob(activeJob ? activeJob.id : ordered[0].id);
+      selectJob(activeJob ? activeJob.id : ordered[0]!.id);
     }
   } catch (e) { console.error("Load jobs error", e); }
 };
@@ -200,7 +200,7 @@ const selectJob = async (id: string) => {
     if (job) {
       const orderedTasks = sortByPlan(tasks.value, job.plan);
       if (orderedTasks.length > 0) {
-        selectTask(orderedTasks[0].id);
+        selectTask(orderedTasks[0]!.id);
       }
     }
   } catch (e) { console.error("Load tasks error", e); }
