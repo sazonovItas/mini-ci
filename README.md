@@ -78,7 +78,6 @@ The easiest way to run Mini-CI is using the provided Docker Compose setup, which
 Clone the repository:
 
 ```shell
-Bash
 git clone https://github.com/yourusername/mini-ci.git
 cd mini-ci
 ```
