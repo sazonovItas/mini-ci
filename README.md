@@ -112,24 +112,42 @@ Mini-CI uses a YAML syntax to define jobs and tasks. Create a new workflow in th
 
 ```yaml
 jobs:
-  - name: test-build
-    run:
-      image: docker.io/library/golang:1.25
-      env:
-        - "GOOS=linux"
-      scripts:
-        - name: check-version
-          command: ["go", "version"]
-        - name: run-tests
-          command: ["go", "test", "./..."]
-  
-  - name: package
+  - name: job-1
     run:
       image: docker.io/library/alpine:latest
       scripts:
-        - name: archive
-          command: ["tar", "-czf", "release.tar.gz", "."]
+        - name: hello, minici
+          command:
+            - sh
+            - -c
+            - |
+
+              echo "hello, minici"
+        - name: list directories
+          command: ["ls", "-la"]
+  - name: job-2
+    run:
+      image: docker.io/library/alpine:latest
+      scripts:
+        - name: apk add packet
+          command:
+            - sh
+            - -c
+            - |
+              set -eux
+
+              apk update && apk add curl
+        - name: use installed packet
+          command:
+            - sh
+            - -c
+            - |
+              set -eux
+
+              curl -L google.com
 ```
+
+More examples you can see in the `examples` directory
 
 Running a Build
 
