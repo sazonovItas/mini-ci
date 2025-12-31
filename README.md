@@ -50,19 +50,19 @@ Messaging	Socket.IO	Real-time bidirectional communication.
 
 Visualize jobs and their statuses in real-time.
 
-![alt text](https://via.placeholder.com/800x400.png?text=Placeholder+for+Graph+Screenshot)
+<img width="719" height="256" alt="image" src="https://github.com/user-attachments/assets/5e154db0-5bab-4b84-b883-092e38a45442" />
 
 2. Live Log Terminal
 
 Stream logs directly from the containerd task.
 
-![alt text](https://via.placeholder.com/800x400.png?text=Placeholder+for+Logs+Screenshot)
+<img width="513" height="720" alt="image" src="https://github.com/user-attachments/assets/25e3da73-340c-4027-83b3-56f71feca752" />
 
 3. YAML Configuration Editor
 
 Edit and validate your CI pipelines.
 
-![alt text](https://via.placeholder.com/800x400.png?text=Placeholder+for+Editor+Screenshot)
+<img width="1280" height="623" alt="image" src="https://github.com/user-attachments/assets/21d5b518-4db0-4844-88fa-95ac7747fbb9" />
 
 🚀 Getting Started
 Prerequisites
