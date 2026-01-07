@@ -62,6 +62,7 @@ services:
       context: .
       dockerfile: build/local/Dockerfile.worker
     image: minici/worker:local
+    restart: unless-stopped
     privileged: true
     networks:
       - default
